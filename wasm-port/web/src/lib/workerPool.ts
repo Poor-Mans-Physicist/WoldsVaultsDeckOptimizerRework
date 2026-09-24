@@ -97,6 +97,25 @@ export function dispatchTagged<T>(
   });
 }
 
+/** Structural optimizer: send one construction-kernel request (enumerate,
+ *  batch-score, or outer chain) to a specific worker. */
+export function dispatchConstruction<T>(
+  workerIdx: number,
+  type:      "cc_enum" | "cc_eval" | "cc_chain",
+  payload:   Record<string, unknown>,
+): Promise<T> {
+  const pool = ensurePool();
+  const slot = pool[workerIdx % pool.length];
+  const id = _nextId++;
+  return new Promise<T>((resolve, reject) => {
+    slot.pending.set(id, {
+      resolve: resolve as (r: SliceResult) => void,
+      reject,
+    });
+    slot.worker.postMessage({ id, type, payload });
+  });
+}
+
 /** Split `items` into `n` contiguous chunks of as-even-as-possible sizes. */
 export function chunkInto<T>(items: readonly T[], n: number): T[][] {
   if (n <= 1 || items.length <= 1) return [items.slice()];

@@ -309,8 +309,15 @@ that compares every deck at its stock layout.
 
 | Core              | Effect                                            | Limit | Allow flag                  | Costs core slot? |
 | ----------------- | ------------------------------------------------- | ----- | --------------------------- | ---------------- |
-| Construction Core | Add new regular (`O`) slots to the deck grid      | ≤ 3   | `cores.construction_allow`  | Yes (1)          |
-| Arcane Core       | Convert existing regular slots to arcane (`A`)    | ≤ 3   | `cores.arcane_core_allow`   | Yes (1)          |
+| Construction Core | Add new regular (`O`) slots to the deck grid      | ≤ 3 (≤ 5 Greater) | `cores.construction_allow`  | Yes (1)          |
+| Arcane Core       | Convert existing regular slots to arcane (`A`)    | ≤ 3 (≤ 5 Greater) | `cores.arcane_core_allow`   | Yes (1)          |
+
+Core slot counts (woldsvaults `ModDeckCoresProvider`): Construction lesser 1,
+normal 2–3, greater 4–5 slots; Arcane lesser 2, normal 2–3, greater 4–5
+conversions. The count is rolled ONCE when the core item is generated
+(`onPopulate` → `slotRoll`) and is printed on the core; every anvil
+(re)application places exactly that many. The "Greater structural cores"
+toggle raises both placement caps to 5.
 
 > ⚠️ **Arcane Core ≠ Archive Core.** The Archive Core (scoring
 > multiplier, `base ^ (2.1·√n_arcane_placed)`) is unchanged by structural
@@ -348,57 +355,96 @@ before launching the SA. The user sees a banner; nothing crashes.
 The Deck-card meta line shows the cost: `… X cores (−N structural) · …`
 so the budget reduction is visible without opening the cores panel.
 
-### Construction Core — connectivity rule
+### Construction Core — placement rule (game-exact since 2026-09-24)
 
-A construction placement is valid only at a cell that is **8-direction
-adjacent** to at least one existing slot. "Existing slot" means a slot
-in either:
+Mirrors woldsvaults `CreateSlotDeckModifier` (addon ≥ 0.33.2). Each added
+slot is a pick among the cells that are:
 
-- the original deck (`Deck.slots`), or
-- any tile already placed by the Construction Core in this session
-  (`structural.addedSlots`).
+- **orthogonally** adjacent (up/down/left/right — not diagonal) to an
+  existing slot: an original deck slot (`Deck.slots`, arcane included) or
+  a tile the Construction Core already added, and
+- inside the **absolute** box col 0–8, row 0–5 (`MAX_WIDTH = 8`,
+  `MAX_HEIGHT = 5`; layout-string column = game x, row = game y).
 
-Placement chains: adding slot #1 unlocks new candidates 8-adjacent to
-#1. Adding slot #2 (which may have only been possible because #1
-existed) is fine.
+Every stock deck's layout starts at col 0 / row 0, so the game can never
+add a slot left of or above a deck — growth is into holes, rightward to
+col 8 and downward to row 5 only. Picks are sequential, so a tile may hang
+off an earlier addition (col 8 needs col 7 first). In game the picks are
+uniformly random (`JavaRandom.ofNanoTime()` at anvil time); the UI lets
+the player place the layout they rolled.
 
-Removal (right-click on a construction tile) is allowed iff the
-remaining additions stay **connected** to the original layout via
-8-adjacency through originals + remaining additions. So a tile that
-later additions hang off of is locked until those later additions are
-removed first. This is the only "ordering" rule on the Construction
-Core; we don't track placement order otherwise.
+Removal (right-click on a construction tile) is allowed iff the remaining
+additions all stay orthogonally reachable from the original layout.
 
-#### Hard footprint cap — 9 × 6
-
-The bounding box of all placeable slots (native + construction-added
-`O`/`A` positions) is capped at **9 cells wide × 6 cells tall**. The
-Construction Core never surfaces a candidate that would push the bbox
-past those dimensions. This matches the engine's hard ceiling on deck
-size — you cannot construct your way past the largest legal deck.
-
-A candidate is filtered iff:
-
-- adding it would make the new max-col − min-col + 1 > 9, OR
-- adding it would make the new max-row − min-row + 1 > 6.
-
-Candidates *inside* the current bbox are always safe (the bbox doesn't
-grow). A deck already at 9×6 only sees candidates in its current
-bbox (i.e. infilling holes between existing slots).
+History: before 2026-06-15 the game used a relative 9 × 6 bounding-box
+test (growth left/up possible) and before 2026-07-04 the box was 10 × 7;
+the web app modeled the old relative rule with 8-direction adjacency until
+2026-09-24.
 
 Implementation: `wasm-port/web/src/lib/structural.ts`:
 
-- `constructionCandidates(base, sc)` — set of cells legal for the next
-  placement, filtered by both 8-adjacency and the 9×6 bbox cap.
-  Returns empty once the cap of 3 is reached.
-- `canRemoveConstructionTile(pos, base, sc)` — BFS from all originals
-  through the universe `originals ∪ (additions − {pos})`; succeeds iff
-  every remaining addition is reached.
+- `constructionCandidates(base, sc)` — cells legal for the next pick.
+  Returns empty once the cap is reached.
+- `canRemoveConstructionTile(pos, base, sc)` — orthogonal BFS from all
+  originals through `originals ∪ (additions − {pos})`.
+
+### Structural optimizer (Construction layout search) — WEB ONLY
+
+With a Construction Core placed and a Run on the board, the Optimizer
+card's **Structural Optimization** section searches every layout the game
+can roll for that deck, holding the Run's core combo and every other
+scoring input fixed, and reports how rare the player's layout is.
+
+- **Layout space** (`wasm-port/ndm_core/src/construction.rs`): all sets of
+  exactly k added cells reachable by the placement rule above, where k =
+  the number of construction slots placed (= the core's fixed slot count;
+  a reroll never changes k). Exact per-roll probability of a set = Σ over
+  valid pick orders of ∏ 1/|frontier| (the game's uniform pick), computed
+  by a DP over the 2^k placed-subsets. Enumeration is complete: Σ P over
+  all k-sets = 1.
+- **Reflection classes**: layouts whose full slot grid (base ∪ added,
+  arcane flags kept) is a horizontal and/or vertical mirror of another
+  score identically and are evaluated once. Horizontal is always allowed
+  except in Exact mode or with Targeted rules on left/right greeds;
+  vertical additionally not with a row-position (cake) implicit.
+  Verified by mapping solved assignments through the reflection (L↔R,
+  U↔D greeds) and re-scoring: worst |Δ| 6.5e-16.
+- **Search**: every class is screened with a cold SA (Standard 10k×1,
+  Deep 30k×2), outer layout-space SA chains relocate one added cell at a
+  time (Standard 24 chains × 300 steps @ 20k, Deep 48 × 500 @ 30k), and the
+  finalists are re-scored deep; the best is rendered as a full result
+  (switchable with the player's own layout in the center panel).
+- **Rarity** of the player's layout at score T (their layout re-scored
+  deep): P(one roll beats T) = mass of classes with an achieved score > T
+  (proven) + the band below T (screen score ≥ 0.8 T): the closest classes
+  refined outright, the rest by stratified probability-weighted sampling,
+  and close calls (≤ 3 % below T) re-scored at a deeper resolve budget.
+  Point estimate excludes still-undecided mass; the displayed range adds it
+  (upper end) and ±2σ sampling error. Reported: roll chance of the exact
+  layout, percentile (P(roll ≥ T)), % of max, expected rolls to beat
+  (1 / P(better)).
+- **Accuracy** (vs exhaustive truth, runic + cake Mystery, pure core,
+  measured 2026-09-24 while the optimizer still mixed k = 4 and 5 at ½
+  each — a modeling error since fixed): the ideal found is the true
+  5-slot optimum (11,259). Rank-300 layout, true 1 in 124 rolls: Standard ~146 (range
+  50–202), Deep ~134 (range 70–155). Rank-30 layout, true 1 in 2,297: Deep
+  ~2,280 (range 654–2,300), proven mass exactly equal to truth. Every SA
+  score is an achieved assignment (a lower bound), so the proven part never
+  over-counts; misses bias P(better) low. Deep runs ≈ 70 s uncached in the
+  browser, Standard ≈ 15–30 s, cached re-checks ≈ 10 s.
+- **Cache**: enumeration, per-class best scores, and the search result
+  live until any scoring input changes (deck, base layout / arcane
+  conversions, class, core combo, optimizer mode + rules / stacks, mystery
+  picks, implicit toggle, Complex Cards, min stat cards, auto-place arcane,
+  greed knob, tier). Moving construction slots and re-running reuses it —
+  the new layout's report is produced automatically after Run.
+- Arcane conversions on construction-added slots are not supported by the
+  optimizer (the conversions are held fixed on stock cells).
 
 ### Arcane Core — conversion rule
 
 The Arcane Core converts existing regular (`O`) slots into arcane (`A`)
-slots, up to 3 per session. Conversions can target either:
+slots, up to 3 per session (5 with Greater). Conversions can target either:
 
 - a native regular slot from the deck layout, or
 - a regular slot placed by the Construction Core in the same session.

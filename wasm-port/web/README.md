@@ -137,6 +137,7 @@ Rust core's wasm entrypoint and the TS re-score agree to ≈1e-6 (the badge):
 | `lib/breakdown.ts`, `lib/optimize.ts`                 | classic 1.x mirror + slice dispatch — kept as the parity baseline        |
 | `lib/workerPool.ts`, `worker/optimize.worker.ts`      | lazily-spawned worker pool + in-worker wasm calls                        |
 | `lib/structural.ts`                                   | Construction / Arcane structural-core deck mutations                     |
+| `lib/structuralOpt.ts`                                | Structural optimizer: Construction layout search + roll rarity (cached)  |
 | `lib/state.svelte.ts`, `lib/snapshots.ts`             | central runes-based app state + saved-run snapshots                      |
 
 ### 4. Optimization flow
@@ -205,6 +206,7 @@ web/
     │   ├── DeckGrid.svelte
     │   ├── CorePicker.svelte       ← cores + structural-core toggles
     │   ├── OptimizerSettings.svelte← mode/depth/Complex/min-stat + Run
+    │   ├── StructuralOptimizer.svelte← Structural Optimization section (effort, ideal/yours switch, rarity)
     │   ├── MaxReadout.svelte / TargetedPanel.svelte / ExactPanel.svelte
     │   ├── ImplicitInfo.svelte     ← deck implicit display + on/off
     │   ├── BreakdownDialog.svelte  ← Shift-click math popup

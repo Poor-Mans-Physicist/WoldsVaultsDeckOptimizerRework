@@ -16,7 +16,10 @@
 // `optimizeInventory(input)` is the legacy single-thread path: it composes
 // all three sequentially. The parallel orchestrator lives in workerClient.ts.
 
-import init, { runSaInventory, runSaTagged, scoreTagged } from "../wasm/ndm_core";
+import init, {
+  runSaInventory, runSaTagged, scoreTagged,
+  constructionEnumerate, constructionEval, constructionChain,
+} from "../wasm/ndm_core";
 import wasmUrl from "../wasm/ndm_core_bg.wasm?url";
 
 import {
@@ -132,6 +135,21 @@ export async function runTaggedPayload(
 ): Promise<{ assignment: RawTaggedPlaced[]; score: number }> {
   await initWasm();
   return runSaTagged(payload) as { assignment: RawTaggedPlaced[]; score: number };
+}
+
+/** Structural optimizer kernels (Construction Core layout space). */
+export type ConstructionKind = "cc_enum" | "cc_eval" | "cc_chain";
+
+export async function runConstruction(
+  kind: ConstructionKind,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  await initWasm();
+  switch (kind) {
+    case "cc_enum":  return constructionEnumerate(payload);
+    case "cc_eval":  return constructionEval(payload);
+    case "cc_chain": return constructionChain(payload);
+  }
 }
 
 /** Score-only pass on a fixed assignment (what-if popup cross-check). */

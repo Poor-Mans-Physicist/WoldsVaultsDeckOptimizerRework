@@ -106,23 +106,8 @@ export async function optimizeTaggedAsync(
   }
   const tWorkers = performance.now();
 
-  const cards = parseKernelAssignment(best.assignment);
-  const assignment = new Map<string, Placed>();
-  for (let i = 0; i < input.deck.slots.length; i++) {
-    const [r, c] = input.deck.slots[i];
-    assignment.set(`${r},${c}`, [cards[i].t, cards[i].color]);
-  }
-
-  const breakdown = simulateTaggedBreakdown(
-    input.deck, cards, input.cardClass, best.combo,
-    activeImplicits(input),
-    {
-      colorsReal: colorsRealFor(input, best.combo),
-      complex: input.complexCards,
-      wvFoilRules: input.appMode !== "vanilla",
-    },
-    input.cfg,
-  );
+  const out = finalizeTaggedResult(input, best.combo, best.assignment, best.score);
+  const breakdown = out.breakdown;
 
   console.log(
     `[optimize 2.0] total=${(performance.now() - t0).toFixed(0)}ms  ` +
@@ -138,12 +123,39 @@ export async function optimizeTaggedAsync(
     );
   }
 
+  return out;
+}
+
+/** Kernel output for `input.deck` + `combo` → the full result object (typed
+ *  cards, grid map, TS-mirror breakdown for the verify badge). */
+export function finalizeTaggedResult(
+  input: TaggedRunInput,
+  combo: CoreSpec[],
+  raw: RawTaggedPlaced[],
+  score: number,
+): TaggedOptimizeResult {
+  const cards = parseKernelAssignment(raw);
+  const assignment = new Map<string, Placed>();
+  for (let i = 0; i < input.deck.slots.length; i++) {
+    const [r, c] = input.deck.slots[i];
+    assignment.set(`${r},${c}`, [cards[i].t, cards[i].color]);
+  }
+  const breakdown = simulateTaggedBreakdown(
+    input.deck, cards, input.cardClass, combo,
+    activeImplicits(input),
+    {
+      colorsReal: colorsRealFor(input, combo),
+      complex: input.complexCards,
+      wvFoilRules: input.appMode !== "vanilla",
+    },
+    input.cfg,
+  );
   return {
     deck: input.deck,
     cards, assignment,
-    wasmScore: best.score,
+    wasmScore: score,
     tsScore: breakdown.total,
-    coresUsed: best.combo,
+    coresUsed: combo,
     breakdown,
   };
 }

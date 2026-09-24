@@ -1,8 +1,9 @@
 // Structural cores (WEB ONLY).
 //
-// The Construction Core lets the player add up to 3 new regular slots to the
-// deck grid; the Arcane Core lets the player convert up to 3 existing regular
-// slots into arcane slots. Both cost one of the deck's core-slot budget each.
+// The Construction Core adds new regular slots to the deck grid (the game
+// rolls lesser 1, normal 2–3, greater 4–5); the Arcane Core converts
+// existing regular slots into arcane slots (normal 2–3, greater 4–5). Both
+// cost one of the deck's core-slot budget each.
 // They mutate the deck layout in the UI before the SA kernel sees it; the
 // kernel itself has no idea these cores exist.
 //
@@ -13,11 +14,12 @@
 //   • canRemoveConstructionTile()  — connectivity check for right-click removal
 //   • pruneConvertedAfterChanges() — keep convertedSlots in sync with reality
 //
-// Connectivity rule: every construction-added tile must remain reachable from
-// an original deck slot via 8-direction adjacency, walking only through other
-// originals or other added tiles. Removing a tile is allowed iff the remaining
-// added tiles all stay reachable. This implicitly forbids the player from
-// orphaning a "branch" they built on top of an earlier addition.
+// Placement rule (woldsvaults CreateSlotDeckModifier): each added slot is
+// ORTHOGONALLY adjacent to a slot that already exists (stock, arcane, or an
+// earlier addition) and lies in the absolute box col 0–8, row 0–5. Stock
+// decks start at col 0 / row 0, so the game never adds slots left of or
+// above a deck. Removing a tile is allowed iff the remaining additions all
+// stay orthogonally reachable from an original slot.
 
 import type { Position } from "./types";
 import type { Deck, RawDeck } from "./deck";
@@ -37,8 +39,8 @@ export interface StructuralCores {
    *  ≤5 with Greater). Members may be in either deck.slots (native) or
    *  addedSlots (construction). */
   convertedSlots: Position[];
-  /** "Greater" structural cores — experimental community variant that bumps
-   *  both caps from 3 → 5. Not in the modpack yet; the UI flags it. */
+  /** "Greater" structural cores — the pack's greater tier (4–5 slots for
+   *  both cores); bumps both placement caps from 3 → 5. */
   greaterStructural: boolean;
 }
 
@@ -56,10 +58,8 @@ export function maxArcaneConvert(sc: StructuralCores): number {
   return sc.greaterStructural ? MAX_ARCANE_GREATER : MAX_ARCANE_CONVERT_BASE;
 }
 
-// Hard cap on a deck's footprint — the bounding box of all placeable slots
-// (`O` ∪ `A`, native + construction-added) must fit inside this rectangle.
-// 9 wide × 6 tall is the engine-side limit; the Construction Core cannot
-// push the bbox past it.
+// The Construction Core's absolute placement box: cols 0..MAX_GRID_WIDTH-1,
+// rows 0..MAX_GRID_HEIGHT-1 (CreateSlotDeckModifier MAX_WIDTH 8 / MAX_HEIGHT 5).
 export const MAX_GRID_WIDTH  = 9;
 export const MAX_GRID_HEIGHT = 6;
 
@@ -115,32 +115,19 @@ export function effectiveDeck(base: Deck, sc: StructuralCores, deckmod: number):
   return buildDeck(raw, deckmod);
 }
 
-/** Bounding box of the union of original + added slots. */
-function slotsBbox(base: Deck, sc: StructuralCores): {
-  minR: number; maxR: number; minC: number; maxC: number;
-} {
-  const all: Position[] = [
-    ...base.slots, ...sc.addedSlots,
-  ];
-  let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
-  for (const [r, c] of all) {
-    if (r < minR) minR = r;
-    if (r > maxR) maxR = r;
-    if (c < minC) minC = c;
-    if (c > maxC) maxC = c;
-  }
-  return { minR, maxR, minC, maxC };
+const ORTHO: readonly [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+/** Inside the Construction Core's absolute placement box. */
+export function inConstructionBox(r: number, c: number): boolean {
+  return r >= 0 && r < MAX_GRID_HEIGHT && c >= 0 && c < MAX_GRID_WIDTH;
 }
 
-/** All cells adjacent (8-direction) to any existing slot (original or added)
- *  that aren't themselves already slots AND don't push the slot bbox past
- *  MAX_GRID_WIDTH × MAX_GRID_HEIGHT. Returns [] once the placement cap is
- *  reached so the UI won't surface candidates. */
+/** Every empty cell orthogonally adjacent to a slot (original or added) and
+ *  inside the absolute placement box — exactly the cells the game's next
+ *  pick could land on. Returns [] once the placement cap is reached. */
 export function constructionCandidates(base: Deck, sc: StructuralCores): Position[] {
   if (!sc.constructionEnabled) return [];
   if (sc.addedSlots.length >= maxConstruction(sc)) return [];
-
-  const bb = slotsBbox(base, sc);
 
   const occupied = new Set<string>([
     ...base.slots.map(posKey),
@@ -149,23 +136,12 @@ export function constructionCandidates(base: Deck, sc: StructuralCores): Positio
   const candidates = new Set<string>();
   for (const k of occupied) {
     const [r, c] = k.split(",").map(Number);
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (dr === 0 && dc === 0) continue;
-        const nr = r + dr;
-        const nc = c + dc;
-        const nk = `${nr},${nc}`;
-        if (occupied.has(nk)) continue;
-        // Reject anything that would push the slot bbox past the 9×6 cap.
-        // A candidate that lies INSIDE the current bbox is always fine
-        // regardless of these checks (the union with current bbox doesn't
-        // grow), and anything outside has to satisfy the width/height limit.
-        const newW = Math.max(bb.maxC, nc) - Math.min(bb.minC, nc) + 1;
-        const newH = Math.max(bb.maxR, nr) - Math.min(bb.minR, nr) + 1;
-        if (newW > MAX_GRID_WIDTH)  continue;
-        if (newH > MAX_GRID_HEIGHT) continue;
-        candidates.add(nk);
-      }
+    for (const [dr, dc] of ORTHO) {
+      const nr = r + dr;
+      const nc = c + dc;
+      const nk = `${nr},${nc}`;
+      if (occupied.has(nk) || !inConstructionBox(nr, nc)) continue;
+      candidates.add(nk);
     }
   }
   return [...candidates].map((k) => {
@@ -175,8 +151,8 @@ export function constructionCandidates(base: Deck, sc: StructuralCores): Positio
 }
 
 /** Right-click removal is only valid if every OTHER added tile stays reachable
- *  from an original deck slot through 8-adjacency. Originals are roots, the
- *  search walks through originals + remaining additions. */
+ *  from an original deck slot through orthogonal adjacency. Originals are
+ *  roots, the search walks through originals + remaining additions. */
 export function canRemoveConstructionTile(target: Position, base: Deck, sc: StructuralCores): boolean {
   const remaining = sc.addedSlots.filter((p) => !samePos(p, target));
   if (remaining.length === 0) return true;
@@ -191,15 +167,12 @@ export function canRemoveConstructionTile(target: Position, base: Deck, sc: Stru
   for (const p of queue) visited.add(posKey(p));
   while (queue.length) {
     const [r, c] = queue.shift()!;
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (dr === 0 && dc === 0) continue;
-        const np: Position = [r + dr, c + dc];
-        const nk = posKey(np);
-        if (!universe.has(nk) || visited.has(nk)) continue;
-        visited.add(nk);
-        queue.push(np);
-      }
+    for (const [dr, dc] of ORTHO) {
+      const np: Position = [r + dr, c + dc];
+      const nk = posKey(np);
+      if (!universe.has(nk) || visited.has(nk)) continue;
+      visited.add(nk);
+      queue.push(np);
     }
   }
   // Every remaining addition must be reachable.

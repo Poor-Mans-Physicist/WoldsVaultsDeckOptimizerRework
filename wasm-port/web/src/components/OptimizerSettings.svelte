@@ -5,12 +5,16 @@
 
   import { app, clearRunResult } from "../lib/state.svelte";
   import { OptimizerMode, Depth, DEPTH_PARAMS } from "../lib/types";
+  import StructuralOptimizer from "./StructuralOptimizer.svelte";
 
   interface Props {
     onRun: () => void;
     onSaveSnapshot: () => void;
+    structStatus: "off" | "pending" | "ready";
+    structNote?: string | null;
+    onStructRun: () => void;
   }
-  let { onRun, onSaveSnapshot }: Props = $props();
+  let { onRun, onSaveSnapshot, structStatus, structNote = null, onStructRun }: Props = $props();
 
   const MODES: { value: OptimizerMode; label: string; hint: string }[] = [
     { value: OptimizerMode.MAX,      label: "Max",
@@ -90,6 +94,8 @@
   {#if app.runError}
     <div class="err small">{app.runError}</div>
   {/if}
+
+  <StructuralOptimizer status={structStatus} note={structNote} onRun={onStructRun} />
 </section>
 
 <style>

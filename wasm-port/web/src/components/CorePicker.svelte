@@ -160,7 +160,7 @@
         </label>
       </div>
       <div class="hint greater-hint">
-        Caps go from 3 → 5 for both Construction and Arcane Core.
+        Greater cores roll 4–5 slots: caps go from 3 → 5 for both Construction and Arcane Core.
       </div>
 
       {#if showConstruction}

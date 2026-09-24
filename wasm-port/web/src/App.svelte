@@ -13,8 +13,10 @@
     builderCanvasClick, builderCanvasContextClick,
     saveBuilderDeck, reloadSavedDecks,
     captureSnapshot, saveSnapshot, restoreSnapshot, reloadSnapshots,
-    defaultGreedMult, effectiveCfg,
+    defaultGreedMult, effectiveCfg, clearStructReport,
   } from "./lib/state.svelte";
+  import { runStructural, hasStructCache, tierFor } from "./lib/structuralOpt";
+  import type { TaggedRunInput } from "./lib/tagged";
   import { loadConfigBundle, getMode } from "./lib/config";
   import { loadDecks, implicitCatalog, legalTagCombos } from "./lib/deck";
   import { coreKeyDisplay } from "./lib/coreOptions";
@@ -77,6 +79,8 @@
   // Live breakdown: the run result, re-scored through the what-if overlay
   // when tag edits are active (score-only pass, §9.6).
   const liveBreakdown = $derived.by(() => {
+    if (!shownResult) return null;
+    if (viewIdeal) return shownResult.breakdown;
     if (!app.result) return null;
     if (app.whatIf.size === 0) return app.result.breakdown;
     return whatIfBreakdown() ?? app.result.breakdown;
@@ -93,12 +97,13 @@
   // Per-slot carried tags (post what-if) → notches + hover popup. Slot
   // lookups go through the RESULT's deck (post-structural shape).
   const tagsBySlot = $derived.by<Map<string, GroupTag[]> | null>(() => {
-    if (!app.result) return null;
+    const res = shownResult;
+    if (!res) return null;
     const m = new Map<string, GroupTag[]>();
-    for (let i = 0; i < app.result.deck.slots.length; i++) {
-      const [r, c] = app.result.deck.slots[i];
+    for (let i = 0; i < res.deck.slots.length; i++) {
+      const [r, c] = res.deck.slots[i];
       const k = `${r},${c}`;
-      m.set(k, app.whatIf.get(k) ?? app.result.cards[i]?.groups ?? []);
+      m.set(k, (viewIdeal ? undefined : app.whatIf.get(k)) ?? res.cards[i]?.groups ?? []);
     }
     return m;
   });
@@ -379,33 +384,10 @@
       const deckSnap = $state.snapshot(fxDeck);
       deckSnap.core_slots = effectiveCoreSlots;
 
-      const depth = DEPTH_PARAMS[app.depth];
-
-      // $state.snapshot() unwraps Svelte 5 reactive proxies so structured-clone
-      // can ship them across the worker boundary.
-      const r = await optimizeTaggedAsync({
-        deck:            deckSnap,
-        cardClass:       app.cardClass,
-        mode:            app.optMode,
-        appMode:         app.mode,
-        targetedRules:   $state.snapshot(app.targetedRules) as TagRuleRow[],
-        exactStacks:     $state.snapshot(app.exactStacks) as ExactStack[],
-        mysteryPicks:    app.mysteryPicks ? [...app.mysteryPicks] : null,
-        implicitsEnabled: app.implicitsEnabled,
-        implicitCatalog: implicitCatalog(),
-        legalCombos:     legalTagCombos(app.mode),
-        complexCards:    app.complexCards,
-        minStatPlaced:   app.minRegularPlaced,
-        autoPlaceArcane: app.autoPlaceArcane,
-        cores:           selectedCores(),
-        nIter:           depth.nIter,
-        restarts:        depth.restarts,
-        // effectiveCfg() = app.cfg with the greed-multiplier knob applied
-        // (already a plain snapshot — worker structured-clone safe).
-        cfg:             effectiveCfg()!,
-      });
+      const r = await optimizeTaggedAsync(runInputFor(deckSnap));
       app.result = r;
       app.whatIf = new Map();
+      clearStructReport();
 
       // Migrate preview assignments to the new layout (drops orphans).
       if (app.modifiers) {
@@ -420,7 +402,116 @@
       app.elapsedMs = performance.now() - t0;
       app.running   = false;
     }
+    // A finished structural pass for this scoring setup is cached: report
+    // the new hand-placed layout's rarity right away (cheap refinement only).
+    if (app.result && structStatus.state === "ready"
+        && hasStructCache(structFingerprint(), app.structural.addedSlots.length)) {
+      runStructuralOpt();
+    }
   }
+
+  /** The optimizer input for `deck` from the live panel state. Shared by the
+   *  main run and the structural optimizer so both score identically. */
+  function runInputFor(deck: import("./lib/deck").Deck): TaggedRunInput {
+    const depth = DEPTH_PARAMS[app.depth];
+    // $state.snapshot() unwraps Svelte 5 reactive proxies so structured-clone
+    // can ship them across the worker boundary.
+    return {
+      deck,
+      cardClass:       app.cardClass,
+      mode:            app.optMode,
+      appMode:         app.mode,
+      targetedRules:   $state.snapshot(app.targetedRules) as TagRuleRow[],
+      exactStacks:     $state.snapshot(app.exactStacks) as ExactStack[],
+      mysteryPicks:    app.mysteryPicks ? [...app.mysteryPicks] : null,
+      implicitsEnabled: app.implicitsEnabled,
+      implicitCatalog: implicitCatalog(),
+      legalCombos:     legalTagCombos(app.mode),
+      complexCards:    app.complexCards,
+      minStatPlaced:   app.minRegularPlaced,
+      autoPlaceArcane: app.autoPlaceArcane,
+      cores:           selectedCores(),
+      nIter:           depth.nIter,
+      restarts:        depth.restarts,
+      // effectiveCfg() = app.cfg with the greed-multiplier knob applied
+      // (already a plain snapshot — worker structured-clone safe).
+      cfg:             effectiveCfg()!,
+    };
+  }
+
+  // ─── Structural optimization (Construction Core layout search) ─────────
+
+  /** The stock deck with the player's arcane conversions, no construction. */
+  const structBaseDeck = $derived(
+    baseDeckForTab && app.cfg
+      ? effectiveDeck(baseDeckForTab, { ...app.structural, addedSlots: [] }, app.cfg.deckmod)
+      : null,
+  );
+
+  const structStatus = $derived.by<{ state: "off" | "pending" | "ready"; note: string | null }>(() => {
+    const allowed = app.cfg?.cores.construction_allow ?? false;
+    if (!allowed || !app.structural.constructionEnabled || !structuralUiActive) {
+      return { state: "off", note: null };
+    }
+    const added = app.structural.addedSlots;
+    if (!app.result || !tierFor(added.length)) return { state: "pending", note: null };
+    const addedKeys = new Set(added.map(([r, c]) => `${r},${c}`));
+    if (app.structural.convertedSlots.some(([r, c]) => addedKeys.has(`${r},${c}`))) {
+      return {
+        state: "pending",
+        note: "Arcane conversions on construction slots aren't supported by structural optimization — convert stock slots only.",
+      };
+    }
+    return { state: "ready", note: null };
+  });
+
+  /** Everything that changes a layout's score, except the construction
+   *  slots themselves. The structural cache lives until this changes. */
+  function structFingerprint(): string {
+    const d = structBaseDeck;
+    return JSON.stringify({
+      mode: app.mode, tab: app.tab, deck: d?.key, name: d?.name,
+      slots: d?.slots, arcane: d?.arcaneSlots,
+      cls: app.cardClass, combo: app.result?.coresUsed,
+      opt: app.optMode, rules: app.targetedRules, stacks: app.exactStacks,
+      mystery: app.mysteryPicks, imp: app.implicitsEnabled,
+      complex: app.complexCards, minStat: app.minRegularPlaced, auto: app.autoPlaceArcane,
+      cfg: effectiveCfg(),
+    });
+  }
+
+  async function runStructuralOpt() {
+    if (structStatus.state !== "ready" || !app.result || !structBaseDeck || !baseDeckForTab || !app.cfg) return;
+    if (app.structOpt.running || app.running) return;
+    const base = $state.snapshot(baseDeckForTab);
+    const deckmod = app.cfg.deckmod;
+    const structural = $state.snapshot(app.structural);
+    const baseDeck = $state.snapshot(structBaseDeck);
+    app.structOpt.running = true;
+    app.structOpt.error = null;
+    app.structOpt.progress = "Starting…";
+    try {
+      const report = await runStructural({
+        run:        runInputFor(baseDeck),
+        combo:      $state.snapshot(app.result.coresUsed),
+        baseDeck,
+        deckFor:    (added) => effectiveDeck(base, { ...structural, addedSlots: [...added] }, deckmod),
+        userAdded:  structural.addedSlots,
+        userScore:  app.result.wasmScore,
+        fingerprint: structFingerprint(),
+      }, app.structOpt.effort, (msg) => { app.structOpt.progress = msg; });
+      app.structOpt.report = report;
+    } catch (e) {
+      app.structOpt.error = e instanceof Error ? e.message : String(e);
+    } finally {
+      app.structOpt.running = false;
+      app.structOpt.progress = null;
+    }
+  }
+
+  const viewIdeal = $derived(app.structOpt.view === "ideal" && app.structOpt.report !== null);
+  /** What the center panel renders: the player's run, or the ideal layout. */
+  const shownResult = $derived(viewIdeal ? app.structOpt.report!.idealResult : app.result);
 
   // ─── Slot click dispatch — different action per tab ─────────────────────
   // Optimize/Build: plain click = tag-edit what-if popup; Shift+click = the
@@ -432,7 +523,8 @@
     const [r, c] = key.split(",").map(Number);
     const pos = [r, c] as Position;
     if (app.tab === "optimize" || app.tab === "build") {
-      if (shiftKey) {
+      // The ideal layout is read-only: what-if edits belong to the player's run.
+      if (shiftKey || viewIdeal) {
         // Show the breakdown for the LIVE (what-if) state when edits exist.
         breakdownPos  = pos;
         breakdownBd   = liveBreakdown?.perSlot.get(key) ?? bd;
@@ -575,7 +667,9 @@
       </section>
 
       {#if app.tab === "optimize" || app.tab === "build"}
-        <OptimizerSettings onRun={run} onSaveSnapshot={openSaveSnapshot} />
+        <OptimizerSettings onRun={run} onSaveSnapshot={openSaveSnapshot}
+          structStatus={structStatus.state} structNote={structStatus.note}
+          onStructRun={runStructuralOpt} />
         <CorePicker />
       {/if}
 
@@ -586,14 +680,16 @@
 
     <!-- ── Center: deck grid + result bar ─────────────────────────── -->
     <section class="col-center">
-      {#if app.result && (app.tab === "optimize" || app.tab === "build")}
-        {@const r = app.result}
+      {#if shownResult && (app.tab === "optimize" || app.tab === "build")}
+        {@const r = shownResult}
         {@const delta = Math.abs(r.wasmScore - r.tsScore)}
         {@const ok = delta <= VERIFY_TOL}
         <!-- Structural cores aren't in r.coresUsed (they never reach the SA);
              surface them in the cores chip alongside the SA-picked ones. -->
         {@const structLabels = [
-          ...(app.structural.constructionEnabled ? [`construction_core×${app.structural.addedSlots.length}`] : []),
+          ...(app.structural.constructionEnabled
+            ? [`construction_core×${viewIdeal ? app.structOpt.report!.ideal.added.length : app.structural.addedSlots.length}`]
+            : []),
           ...(app.structural.arcaneCoreEnabled   ? [`arcane_core×${app.structural.convertedSlots.length}`]   : []),
         ]}
         {@const allCoreLabels = [
@@ -604,7 +700,10 @@
         ]}
         <div class="result-bar">
           <span class="score">NDM <strong>{r.wasmScore.toFixed(3)}</strong></span>
-          {#if app.whatIf.size > 0 && liveBreakdown}
+          {#if viewIdeal}
+            <span class="badge ideal" title="Structural optimizer's ideal Construction layout — switch back under Structural Optimization">ideal layout</span>
+          {/if}
+          {#if !viewIdeal && app.whatIf.size > 0 && liveBreakdown}
             <span class="badge whatif" title="Ephemeral tag edits applied — discarded on the next Run">
               what-if {liveBreakdown.total.toFixed(3)}
               ({liveBreakdown.total - r.tsScore >= 0 ? "+" : ""}{(liveBreakdown.total - r.tsScore).toFixed(3)})
@@ -631,16 +730,16 @@
       {/if}
 
       <DeckGrid
-        deck={fxDeck ?? app.deck}
-        assignment={app.result?.assignment ?? null}
+        deck={viewIdeal ? shownResult!.deck : (fxDeck ?? app.deck)}
+        assignment={shownResult?.assignment ?? null}
         perSlotNdm={perSlotNdm}
         breakdown={liveBreakdown?.perSlot ?? null}
         tagsBySlot={tagsBySlot}
         onSlotClick={onSlotClick}
-        placementMode={app.structural.constructionEnabled && structuralUiActive}
-        conversionMode={app.structural.arcaneCoreEnabled && structuralUiActive}
+        placementMode={app.structural.constructionEnabled && structuralUiActive && !viewIdeal}
+        conversionMode={app.structural.arcaneCoreEnabled && structuralUiActive && !viewIdeal}
         placementCandidates={placementCandidates}
-        addedSlots={app.structural.addedSlots}
+        addedSlots={viewIdeal ? app.structOpt.report!.ideal.added : app.structural.addedSlots}
         convertedSlots={app.structural.convertedSlots}
         onPlaceSlot={(p) => addConstructionSlot(p)}
         onRemoveSlot={(p) => removeConstructionSlot(p)}
@@ -931,6 +1030,7 @@
   .badge.ok  { background: rgba(16,185,129,.18); color: #6EE7B7; }
   .badge.bad { background: rgba(220,38,38,.22); color: #FCA5A5; }
   .badge.whatif { background: rgba(232,195,59,.18); color: #FCD34D; }
+  .badge.ideal  { background: rgba(99,102,241,.22); color: #C7D2FE; }
   .time  { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
   .cores { color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 </style>

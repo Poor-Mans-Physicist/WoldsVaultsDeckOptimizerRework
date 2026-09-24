@@ -6,8 +6,8 @@
 // final breakdown re-score; this worker only does the WASM-heavy SA work.
 
 import {
-  optimizeInventorySlice, runTaggedPayload,
-  type OptimizeInput, type SliceResult, type RawTaggedPlaced,
+  optimizeInventorySlice, runTaggedPayload, runConstruction,
+  type OptimizeInput, type SliceResult, type RawTaggedPlaced, type ConstructionKind,
 } from "../lib/optimize";
 import type { CoreSpec } from "../lib/types";
 
@@ -25,24 +25,34 @@ interface TaggedMsg {
   payload: Record<string, unknown>;
 }
 
+/** Structural optimizer: enumerate / batch-score / outer chain. */
+interface ConstructionMsg {
+  id:   number;
+  type: ConstructionKind;
+  payload: Record<string, unknown>;
+}
+
 export interface TaggedTaskResult {
   assignment: RawTaggedPlaced[];
   score:      number;
 }
 
-interface ReplyOk  { id: number; ok: true;  result: SliceResult | TaggedTaskResult; }
+interface ReplyOk  { id: number; ok: true;  result: unknown; }
 interface ReplyErr { id: number; ok: false; error: string; }
 
-self.onmessage = async (ev: MessageEvent<SliceMsg | TaggedMsg>) => {
+self.onmessage = async (ev: MessageEvent<SliceMsg | TaggedMsg | ConstructionMsg>) => {
   const { id, type } = ev.data;
   try {
-    let result: SliceResult | TaggedTaskResult;
+    let result: SliceResult | TaggedTaskResult | unknown;
     if (type === "slice") {
       const { input, candidatesSlice } = ev.data as SliceMsg;
       result = await optimizeInventorySlice(input, candidatesSlice);
     } else if (type === "tagged") {
       const { payload } = ev.data as TaggedMsg;
       result = await runTaggedPayload(payload);
+    } else if (type === "cc_enum" || type === "cc_eval" || type === "cc_chain") {
+      const { payload } = ev.data as ConstructionMsg;
+      result = await runConstruction(type, payload);
     } else {
       throw new Error(`unknown message type: ${type}`);
     }

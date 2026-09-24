@@ -11,6 +11,7 @@ import type { Deck } from "./deck";
 import { implicitCatalog } from "./deck";
 import type { ResolvedConfig, ConfigBundle } from "./config";
 import type { TaggedOptimizeResult } from "./taggedClient";
+import type { StructEffort, StructReport } from "./structuralOpt";
 import { defaultTargetedRules, comboForcesColors } from "./tagged";
 import { toPayload, isScoringImplicit, type ImplicitPayload } from "./implicits";
 import {
@@ -128,6 +129,19 @@ interface AppState {
   /** Cached list of optimization snapshots — refreshed on save/delete. The
    *  Snapshots tab reads this; lib/snapshots.ts owns the storage. */
   snapshots: Snapshot[];
+
+  /** Structural optimizer (Construction Core layout search, lib/structuralOpt.ts).
+   *  `report` belongs to the live run result and dies with it; the heavy
+   *  per-layout scores live in structuralOpt's own fingerprinted cache. */
+  structOpt: {
+    effort:   StructEffort;
+    running:  boolean;
+    progress: string | null;
+    error:    string | null;
+    report:   StructReport | null;
+    /** Which layout the center grid renders. */
+    view:     "user" | "ideal";
+  };
 }
 
 function initialCoreState(): CoreRowState[] {
@@ -173,7 +187,20 @@ export const app = $state<AppState>({
   builder:    emptyBuilder(),
   savedDecks: [],
   snapshots:  [],
+
+  structOpt: {
+    effort: "standard", running: false, progress: null, error: null,
+    report: null, view: "user",
+  },
 });
+
+/** Drop the structural report (not the layout-score cache): it describes
+ *  the run result that just went away. */
+export function clearStructReport(): void {
+  app.structOpt.report = null;
+  app.structOpt.error = null;
+  app.structOpt.view = "user";
+}
 
 /** Build the user's CoreSpec[] from the picker state. */
 export function selectedCores(): CoreSpec[] {
@@ -246,6 +273,7 @@ export function clearRunResult(): void {
   app.elapsedMs = null;
   app.runError  = null;
   app.whatIf    = new Map();   // what-if edits die with the run (§9.6)
+  clearStructReport();
 }
 
 // ─── Optimizer 2.0 helpers ───────────────────────────────────────────────────
@@ -412,8 +440,8 @@ export function resetStructural(): void {
   app.structural = emptyStructural();
 }
 
-/** Toggle the "Greater" structural-cores variant (experimental community
- *  cap, 5 instead of 3). Switching off doesn't auto-prune existing
+/** Toggle the "Greater" structural-cores tier (rolls 4–5; placement cap
+ *  5 instead of 3). Switching off doesn't auto-prune existing
  *  overflow tiles — the new cap takes effect only for further additions /
  *  conversions, and the counter clamps at 0 when the user is over-cap. */
 export function toggleGreaterStructural(on: boolean): void {
@@ -779,5 +807,6 @@ export function restoreSnapshot(snap: Snapshot): void {
   };
   app.elapsedMs = null;
   app.runError  = null;
+  clearStructReport();
   clearPreviewAssignments();
 }

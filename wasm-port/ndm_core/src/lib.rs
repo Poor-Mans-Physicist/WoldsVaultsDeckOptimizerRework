@@ -15,3 +15,5 @@ pub mod wasm_api;
 #[path = "../../../ndm_core/src/tagsim.rs"]
 pub mod tagsim;
 pub mod tagsim_wasm;
+pub mod construction;
+pub mod construction_wasm;

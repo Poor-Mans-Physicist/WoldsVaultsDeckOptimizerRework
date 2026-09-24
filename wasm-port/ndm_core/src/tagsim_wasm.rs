@@ -18,7 +18,7 @@ use crate::tagsim::{
     COLOR_NONE,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct StackIn {
     pub t: String,
     pub color: String,
@@ -33,7 +33,7 @@ pub struct StackIn {
     pub min_place: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct RuleIn {
     pub axis: String,     // "color" | "type" | "group" | "greed"
     #[serde(default)]
@@ -45,7 +45,7 @@ pub struct RuleIn {
     pub max: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ImplicitIn {
     pub kind: String,
     #[serde(default)]
@@ -59,7 +59,7 @@ pub struct ImplicitIn {
     pub extra: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct TagRunInput {
     pub slots: Vec<(i32, i32)>,
     pub row_peers: Vec<Vec<usize>>,
@@ -157,7 +157,7 @@ fn parse_group_list(groups: &[String]) -> u16 {
     mask
 }
 
-fn build_run(inp: &TagRunInput) -> TagRun<'_> {
+pub(crate) fn build_run(inp: &TagRunInput) -> TagRun<'_> {
     let stacks: Vec<CardSpec> = inp.stacks.iter().map(|s| {
         let color = tag_color_from_str(&s.color);
         CardSpec {
@@ -255,7 +255,7 @@ fn build_run(inp: &TagRunInput) -> TagRun<'_> {
     }
 }
 
-fn placed_out(asgn: &[SlotCard]) -> Vec<PlacedOut> {
+pub(crate) fn placed_out(asgn: &[SlotCard]) -> Vec<PlacedOut> {
     asgn.iter().map(|c| PlacedOut {
         t: tag_card_type_to_str(c.t).to_owned(),
         color: tag_color_to_str(c.color).to_owned(),
