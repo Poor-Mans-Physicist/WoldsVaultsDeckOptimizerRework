@@ -60,6 +60,15 @@ configs:
   p2_cool_big:  { n_iter: 75000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 225000, target, [0.1, 0.001, 0.005, 0.01]] }
   p2_top2_LP:   { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish], phase2: [2, 360000, target, [0.1, 0.001, 0.005, 0.01]] }
   tgt_150k:     { n_iter: 150000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+  # Locked strata (strata = [axes, span, n_iter]; "auto" = the core set's count axes).
+  base:         { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  base16:       { n_iter: 60000, restarts: 16, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  st_auto2:     { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[auto], 2, 60000] }
+  st_auto1:     { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[auto], 1, 60000] }
+  st_autog1:    { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[auto, greed], 1, 60000] }
+  st_g1:        { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[greed], 1, 60000] }
+  st_autog2:    { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[auto, greed], 2, 60000] }
+  st_auto2_c:   { n_iter: 60000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]], strata: [[auto], 2, 30000] }
   p2_720k:      { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]] }
   p2_720k_w:    { n_iter: 22500,  restarts: 16, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]] }
   p2_720k_t2:   { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [2, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
@@ -79,5 +88,9 @@ panel:
   halv_m02k2: { n_iter: 30000, restarts: 12, phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]],
                halving: { restarts: 4, n_iter: 30000, margin: 0.02, keep_min: 2 } }
   halv_m05x2: { n_iter: 60000, restarts: 12, phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 } }
+  halv_st1:  { n_iter: 60000, restarts: 12, phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 }, strata: [[auto], 1, 60000] }
+  halv_r14:  { n_iter: 60000, restarts: 14, phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]],
                halving: { restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 } }
   ref:       { n_iter: 60000, restarts: 16, phase2: [4, 360000, target, [0.1, 0.001, 0.005, 0.01]] }

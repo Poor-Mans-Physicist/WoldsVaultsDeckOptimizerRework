@@ -67,7 +67,7 @@ def run_config(resolved, cname, cfg, reps):
     p2 = (int(p2[0]), int(p2[1]), p2[2], [float(v) for v in p2[3]]) if p2 else None
     # Phase-2 configs need every restart of a replicate in one kernel job
     # (the top-K pick happens inside); plain configs run one job per restart.
-    per_job = cfg["restarts"] if p2 else 1
+    per_job = cfg["restarts"] if (p2 or cfg.get("strata")) else 1
     keys, jobs = [], []
     for pid, (cdeck, cls, cores, imps) in resolved.items():
         for rep in range(reps):
@@ -77,7 +77,7 @@ def run_config(resolved, cname, cfg, reps):
                 jobs.append(sa_optimize_tagged(
                     cdeck, cls, cores, n_iter=cfg["n_iter"], implicits=imps,
                     seed=seed, schedule=sched, search_opts=list(cfg.get("opts", [])),
-                    restarts=per_job, phase2=p2, defer=True,
+                    restarts=per_job, phase2=p2, strata=cfg.get("strata"), defer=True,
                 ))
     t0 = time.perf_counter()
     outs = run_sa_jobs(jobs)
@@ -106,6 +106,7 @@ def main() -> None:
     ap.add_argument("--replicates", type=int, default=0)
     ap.add_argument("--only", default="", help="substring filter on problem ids")
     ap.add_argument("--per-problem", action="store_true")
+    ap.add_argument("--hits", action="store_true", help="per-problem count of replicates at best-known")
     args, _ = ap.parse_known_args()
 
     spec = yaml.safe_load(BENCH_CFG.read_text(encoding="utf-8"))
@@ -153,6 +154,15 @@ def main() -> None:
         near = sum(g < 0.5 for g in gaps) / len(gaps)
         print(f"{cname:14s} {statistics.median(gaps):8.3f} {statistics.mean(gaps):8.3f} "
               f"{pct(gaps, 0.9):8.3f} {max(gaps):8.3f} {exact:7.0%} {near:7.0%} {walls[cname]:8.1f}")
+
+    if args.hits:
+        names = list(configs) + list(refs)
+        print(f"\nreplicates reaching best-known (of {reps})\n{'problem':70s} "
+              + " ".join(f"{c:>12s}" for c in names))
+        for pid in pids:
+            cells = [sum(1 for r in results if r[0] == pid and r[1] == c
+                         and r[3] >= best[pid] * (1 - EXACT_TOL)) for c in names]
+            print(f"{pid:70s} " + " ".join(f"{h:12d}" for h in cells))
 
     if args.per_problem:
         names = list(configs)

@@ -39,6 +39,7 @@ def search_from(spec: dict) -> dict:
         "restarts": int(spec["restarts"]),
         "phase2": (int(p2[0]), int(p2[1]), p2[2], [float(v) for v in p2[3]]) if p2 else None,
         "halving": spec.get("halving"),
+        "strata": tuple(spec["strata"]) if spec.get("strata") else None,
     }
 
 

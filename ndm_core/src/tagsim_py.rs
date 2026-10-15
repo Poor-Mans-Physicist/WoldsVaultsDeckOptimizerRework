@@ -10,7 +10,8 @@ use crate::tagsim::{
     group_bit_from_str, group_bits_to_strs, run_sa_tagged as run_core,
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
-    CoreSpecIn, Implicit, Phase2, SaSchedule, SearchOpts, SlotCard, TagAxis, TagRule,
+    CoreSpecIn, Implicit, Phase2, SaSchedule, SearchOpts, SlotCard, Strata,
+    STRATA_DEAD, STRATA_DELUXE, STRATA_GREED, TagAxis, TagRule,
     TagRun, TagSimConfig, COLOR_NONE, SCHEDULE_LEGACY,
 };
 
@@ -154,8 +155,22 @@ fn build_run<'a>(
 fn parse_search_opts(
     flags: &Option<Vec<String>>,
     phase2: &Option<(usize, usize, String, Vec<f64>)>,
+    strata: &Option<(Vec<String>, u8, usize)>,
 ) -> PyResult<SearchOpts> {
     let mut o = SearchOpts::default();
+    if let Some((axes, span, n_iter)) = strata {
+        let mut mask = 0u8;
+        for a in axes {
+            mask |= match a.as_str() {
+                "dead" => STRATA_DEAD,
+                "deluxe" => STRATA_DELUXE,
+                "greed" => STRATA_GREED,
+                other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "unknown strata axis {other:?}: want dead / deluxe / greed"))),
+            };
+        }
+        if mask != 0 { o.strata = Some(Strata { axes: mask, span: *span, n_iter: *n_iter }); }
+    }
     if let Some((top_k, n_iter, kind, params)) = phase2 {
         let sched = parse_schedule(&Some((kind.clone(), params.clone())))?;
         o.phase2 = Some(Phase2 { top_k: *top_k, n_iter: *n_iter, sched });
@@ -248,7 +263,7 @@ fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny, auto_place_arcane,
     colors_real, complex_cards, wv_foil_rules, floor_counts_deluxe,
-    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, defer = false,
+    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, strata = None, defer = false,
 ))]
 pub fn run_sa_tagged(
     py: Python<'_>,
@@ -297,6 +312,7 @@ pub fn run_sa_tagged(
     schedule: Option<(String, Vec<f64>)>,
     search_opts: Option<Vec<String>>,
     phase2: Option<(usize, usize, String, Vec<f64>)>,
+    strata: Option<(Vec<String>, u8, usize)>,
     defer: bool,
 ) -> PyResult<PyObject> {
     let cfg = TagSimConfig {
@@ -326,7 +342,7 @@ pub fn run_sa_tagged(
         cores: cores_in, min_stat_placed, final_pass_nonfoil_evo, exact_groups,
         n_iter, restarts, seed,
         sched: parse_schedule(&schedule)?,
-        opts: parse_search_opts(&search_opts, &phase2)?,
+        opts: parse_search_opts(&search_opts, &phase2, &strata)?,
         cfg,
     };
     if defer {

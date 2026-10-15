@@ -124,7 +124,7 @@
   "cores": "archive_core+foil+pure"
  },
  "Idona's Deck | unconstrained | shiny": {
-  "score": 2908.7299839999996,
+  "score": 2908.729984,
   "cores": "archive_core+equilibrium+foil"
  },
  "Large Deck | min 14 reg | evo": {
@@ -228,7 +228,7 @@
   "cores": "color+foil+pure"
  },
  "The Anvil Deck | min 14 reg | shiny": {
-  "score": 3717.899999999999,
+  "score": 3717.8999999999996,
   "cores": "equilibrium+foil+sparkling+steadfast"
  },
  "The Anvil Deck | min 8 reg | evo": {
@@ -312,7 +312,7 @@
   "cores": "equilibrium+foil+sparkling+steadfast"
  },
  "The Belt Deck | unconstrained | evo": {
-  "score": 2758.0800000000004,
+  "score": 2759.4,
   "cores": "color+foil+pure+void_core"
  },
  "The Belt Deck | unconstrained | shiny": {
@@ -420,7 +420,7 @@
   "cores": "archive_core+color+pure"
  },
  "The Cake Deck | min 14 reg | shiny": {
-  "score": 3185.0,
+  "score": 3187.0,
   "cores": "equilibrium+foil+sparkling"
  },
  "The Cake Deck | min 8 reg | evo": {
@@ -772,7 +772,7 @@
   "cores": "color+foil+pure"
  },
  "The Puzzle Deck | min 14 reg | shiny": {
-  "score": 3302.0,
+  "score": 3332.0,
   "cores": "equilibrium+foil+sparkling"
  },
  "The Puzzle Deck | min 8 reg | evo": {
@@ -796,7 +796,7 @@
   "cores": "deluxe_core+foil+pure"
  },
  "The Puzzle Deck | unconstrained | shiny": {
-  "score": 3723.0,
+  "score": 3744.0,
   "cores": "equilibrium+foil+sparkling"
  },
  "The Queen Deck | min 14 reg | evo": {
@@ -860,11 +860,11 @@
   "cores": "color+deluxe_core+foil+pure"
  },
  "The Relic Deck | unconstrained | shiny": {
-  "score": 3451.2000000000007,
+  "score": 3460.32,
   "cores": "equilibrium+foil+pure+sparkling"
  },
  "The Rook Deck | min 14 reg | evo": {
-  "score": 3625.7760000000003,
+  "score": 3625.7760000000007,
   "cores": "archive_core+color+pure"
  },
  "The Rook Deck | min 14 reg | shiny": {
@@ -996,7 +996,7 @@
   "cores": "color+foil+pure"
  },
  "The Snake Deck | min 14 reg | shiny": {
-  "score": 4394.600000000001,
+  "score": 4401.9000000000015,
   "cores": "equilibrium+foil+sparkling"
  },
  "The Snake Deck | min 8 reg | evo": {

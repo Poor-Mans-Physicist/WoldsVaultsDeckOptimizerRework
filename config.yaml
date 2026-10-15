@@ -181,6 +181,14 @@ testing:
   # 0.148% vs 0.245%, 26 s vs 44 s for the full panel
   # (scripts/bench_panel.py, 2026-10-15).
   halving: { enabled: true, restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 }
+  # Locked strata: after the free restarts, re-anneal with a deck-wide count
+  # (auto = dead for VOID_CORE, deluxe for DELUXE_CORE; or list greed) locked
+  # to the best layout's count ± 1..span; the best locked end joins phase 2.
+  # Off: it finds rare deluxe basins on single core sets (Snake evo
+  # deluxe+foil+pure 0/24 -> 3/24 hits) but not better panel cells (mean gap
+  # 0.168% vs 0.148%, +17% wall; bench_panel.py 2026-10-15). Revisit when
+  # count-scaling cores are buffed.
+  strata: { enabled: false, axes: [auto], span: 1, n_iter: 60000 }
   # SA temperature schedule (tagged engine).
   #   geometric: [t0, t1]                — absolute T in NDM units
   #   target:    [a0, a1, t_init, eta]   — adaptive: accepted share of worse

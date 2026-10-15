@@ -78,6 +78,8 @@ def _search_cfg() -> dict:
         "phase2":   (int(p2["top_k"]), int(p2["n_iter"]), str(p2["schedule"]["kind"]),
                      [float(v) for v in p2["schedule"]["params"]]) if p2 else None,
         "halving":  hv if hv.get("enabled") else None,
+        "strata":   ((list(st["axes"]), int(st["span"]), int(st["n_iter"]))
+                     if (st := t.get("strata") or {}).get("enabled") else None),
     }
 
 
@@ -129,7 +131,8 @@ def solve(tasks: List[Task], search: Optional[dict] = None, seed_salt: Optional[
         t = tasks[ti]
         return (ti, cores, sa_optimize_tagged(
             t.deck, t.cls, cores, n_iter=n_iter, implicits=t.implicits, restarts=restarts,
-            phase2=phase2, seed=_seed(seed_salt, tag, ti, sorted(c.value for c in cores)),
+            phase2=phase2, strata=sc.get("strata") if phase2 else None,
+            seed=_seed(seed_salt, tag, ti, sorted(c.value for c in cores)),
             defer=True,
         ))
 

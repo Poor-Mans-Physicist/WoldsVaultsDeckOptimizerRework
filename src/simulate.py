@@ -599,6 +599,26 @@ def _live_auto_place_arcane() -> bool:
     return _cfg.AUTO_PLACE_ARCANE
 
 
+def resolve_strata(strata: Optional[tuple], cores) -> Optional[tuple]:
+    """(axes, span, n_iter) → kernel form. `"auto"` in axes picks the count
+    axes the core set scales with: VOID_CORE → dead, DELUXE_CORE → deluxe.
+    None when no axis applies."""
+    if not strata:
+        return None
+    axes, span, n_iter = strata
+    out = []
+    for a in axes:
+        if a == "auto":
+            if CoreType.VOID_CORE in cores:
+                out.append("dead")
+            if CoreType.DELUXE_CORE in cores:
+                out.append("deluxe")
+        else:
+            out.append(a)
+    out = sorted(set(out))
+    return (out, int(span), int(n_iter)) if out else None
+
+
 def run_sa_jobs(jobs: list) -> list:
     """Run jobs from ``sa_optimize*(..., defer=True)`` across all cores in
     Rust (rayon, GIL released). Returns raw (assignment, score) tuples in job
@@ -628,6 +648,7 @@ def sa_optimize_tagged(
     search_opts: Optional[List[str]] = None,
     restarts:   int = 1,
     phase2:     Optional[tuple] = None,
+    strata:     Optional[tuple] = None,
     defer:      bool = False,
 ) -> Tuple[Dict[Position, CardType], float]:
     """One SA restart through the 2.0 tag-aware kernel in Max configuration.
@@ -710,6 +731,7 @@ def sa_optimize_tagged(
         schedule               = schedule or _live_sa_schedule(),
         search_opts            = _live_search_opts() if search_opts is None else search_opts,
         phase2                 = phase2,
+        strata                 = resolve_strata(strata, cores),
         defer                  = defer,
     )
     if defer:

@@ -2009,11 +2009,36 @@ fn final_pass_nonfoil_evo(
 /// single-slot replacement and pair swap of the best layout.
 /// `phase2`: after all restarts, the `top_k` best layouts are each
 /// re-annealed from where they ended for `n_iter` more steps on `sched`.
+/// `strata`: after the free restarts, the best layout is re-annealed with a
+/// deck-wide count locked to its own value ± 1..=span, once per offset and
+/// axis (escapes count basins such as one deluxe card too few). The ends join
+/// the phase-2 pool.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SearchOpts {
     pub legal_only: bool,
     pub polish: bool,
     pub phase2: Option<Phase2>,
+    pub strata: Option<Strata>,
+}
+
+pub const STRATA_DEAD: u8 = 1;
+pub const STRATA_DELUXE: u8 = 2;
+pub const STRATA_GREED: u8 = 4;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Strata {
+    pub axes: u8,
+    pub span: u8,
+    pub n_iter: usize,
+}
+
+#[inline(always)]
+fn on_axis(c: &SlotCard, axis: u8) -> i64 {
+    i64::from(match axis {
+        STRATA_DEAD => c.t == T_DEAD,
+        STRATA_DELUXE => c.t == T_DELUXE,
+        _ => is_greed(c.t),
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2046,6 +2071,10 @@ struct Walk<'a> {
     score: f64,
     tmp_old: Vec<usize>,
     tmp_new: Vec<usize>,
+    /// Strata lock (axis, target count): a replacement may only move the
+    /// axis count toward the target, never away from it.
+    lock: Option<(u8, i64)>,
+    lock_count: i64,
 }
 
 impl<'a> Walk<'a> {
@@ -2085,6 +2114,20 @@ impl<'a> Walk<'a> {
             min_stat: min_stat.unwrap_or_else(|| run.min_stat_placed.min(stat_placed)),
             rules, deval, s, score,
             tmp_old: Vec::new(), tmp_new: Vec::new(),
+            lock: None, lock_count: 0,
+        }
+    }
+
+    fn set_lock(&mut self, axis: u8, target: i64) {
+        self.lock = Some((axis, target));
+        self.lock_count = self.asgn.iter().map(|c| on_axis(c, axis)).sum();
+    }
+
+    #[inline(always)]
+    fn lock_delta(&self, old: &SlotCard, new: &SlotCard) -> i64 {
+        match self.lock {
+            Some((axis, _)) => on_axis(new, axis) - on_axis(old, axis),
+            None => 0,
         }
     }
 
@@ -2134,8 +2177,14 @@ impl<'a> Walk<'a> {
         let stat_delta = (counts_toward_floor(&new, &run.cfg) as i32)
             - (counts_toward_floor(&old, &run.cfg) as i32);
         if self.floor_blocks(stat_delta) { return None; }
+        let lock_d = self.lock_delta(&old, &new);
+        if let (Some((_, k)), true) = (self.lock, lock_d != 0) {
+            let cur = self.lock_count;
+            if (cur + lock_d - k).abs() > (cur - k).abs() { return None; }
+        }
         if !self.rules.move_ok(&old, &new, &mut self.tmp_old, &mut self.tmp_new) { return None; }
 
+        self.lock_count += lock_d;
         self.rules.apply(&old, &new, &mut self.tmp_old);
         if si != DEAD_OPTION && self.remaining[si] != u32::MAX { self.remaining[si] -= 1; }
         if old.t != T_DEAD && old_si < self.remaining.len() && self.remaining[old_si] != u32::MAX {
@@ -2154,6 +2203,7 @@ impl<'a> Walk<'a> {
         let old_si = old.stack as usize;
         let stat_delta = (counts_toward_floor(&new, &run.cfg) as i32)
             - (counts_toward_floor(&old, &run.cfg) as i32);
+        self.lock_count -= self.lock_delta(&old, &new);
         self.rules.apply(&new, &old, &mut self.tmp_old);
         if si != DEAD_OPTION {
             if self.remaining[si] != u32::MAX { self.remaining[si] += 1; }
@@ -2314,6 +2364,7 @@ fn sa_one_restart(
     n_iter: usize,
     sched: SaSchedule,
     start: Option<&[SlotCard]>,
+    lock: Option<(u8, i64)>,
 ) -> (Vec<SlotCard>, f64) {
     let mut rng = SmallRng::seed_from_u64(seed);
     let n = geom.n;
@@ -2332,6 +2383,7 @@ fn sa_one_restart(
         }
     };
     let mut w = Walk::new(geom, run, cores, materialized, asgn, remaining, rules, None);
+    if let Some((axis, target)) = lock { w.set_lock(axis, target); }
     let effective_min_stat = w.min_stat;
     let mut best_score = w.score;
     let mut best_asgn = w.asgn.clone();
@@ -2483,20 +2535,47 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
     let base = run.seed.unwrap_or_else(|| SmallRng::from_entropy().gen::<u64>());
     let mut ends: Vec<(Vec<SlotCard>, f64)> = (0..restarts).map(|i| {
         let seed = base ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        sa_one_restart(&geom, &run, &cores, &materialized, seed, run.n_iter, run.sched, None)
+        sa_one_restart(&geom, &run, &cores, &materialized, seed, run.n_iter, run.sched, None, None)
     }).collect();
 
+    let mut strata_ends: Vec<(Vec<SlotCard>, f64)> = Vec::new();
+    if let Some(st) = run.opts.strata {
+        let best_i = (0..ends.len()).fold(0, |b, i| if ends[i].1 > ends[b].1 { i } else { b });
+        let start = ends[best_i].0.clone();
+        let n = geom.n as i64;
+        let mut j = 0u64;
+        for axis in [STRATA_DEAD, STRATA_DELUXE, STRATA_GREED] {
+            if st.axes & axis == 0 { continue; }
+            let c: i64 = start.iter().map(|x| on_axis(x, axis)).sum();
+            for o in -(st.span as i64)..=(st.span as i64) {
+                let k = c + o;
+                if o == 0 || k < 0 || k > n { continue; }
+                j += 1;
+                let seed = base ^ 0x5A17_A5A1_7A5A_17A5 ^ j.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+                let r = sa_one_restart(&geom, &run, &cores, &materialized, seed,
+                                       st.n_iter, run.sched, None, Some((axis, k)));
+                strata_ends.push(r);
+            }
+        }
+    }
+
+    // Phase 2 re-anneals the top_k FREE ends plus the single best strata end;
+    // strata ends never compete for the free slots (they would crowd out
+    // diverse basins with near-best layouts from the same one).
     if let Some(p2) = run.opts.phase2 {
         ends.sort_by(|a, b| b.1.total_cmp(&a.1));
-        let top = p2.top_k.min(ends.len());
-        for j in 0..top {
+        strata_ends.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let mut starts: Vec<Vec<SlotCard>> =
+            ends.iter().take(p2.top_k).map(|e| e.0.clone()).collect();
+        if let Some(e) = strata_ends.first() { starts.push(e.0.clone()); }
+        for (j, start) in starts.iter().enumerate() {
             let seed = base ^ 0xD1B5_4A32_D192_ED03 ^ (j as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-            let start = ends[j].0.clone();
             let r = sa_one_restart(&geom, &run, &cores, &materialized, seed,
-                                   p2.n_iter, p2.sched, Some(&start));
+                                   p2.n_iter, p2.sched, Some(start), None);
             ends.push(r);
         }
     }
+    ends.extend(strata_ends);
     ends.into_iter().fold(None::<(Vec<SlotCard>, f64)>, |best, r| match best {
         Some(b) if b.1 >= r.1 => Some(b),
         _ => Some(r),
