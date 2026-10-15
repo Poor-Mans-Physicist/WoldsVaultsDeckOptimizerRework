@@ -30,7 +30,7 @@ Finally, we have "deluxe" type cards, which are similar to T cards but have a fl
 
 After the channel-consolidation refactor, this repo ships exactly two user-facing channels — both backed by the same `config.yaml`, `decks/`, and the per-mode game-card dumps at the repo root (`modifiers.json` = Wold's, `vh_modifiers.json` = vanilla; picked via `cards.json_file`):
 
-1. **Spreadsheet CLI** (`uv run optimize`) — outer Python orchestrator + outer `ndm_core/` Rust kernel (PyO3). Runs every deck in parallel via multiprocessing (one process per deck; kernel restarts stay serial) and emits `Panel_*.xlsx`.
+1. **Spreadsheet CLI** (`uv run optimize`) — outer Python orchestrator + outer `ndm_core/` Rust kernel (PyO3). Runs every deck × panel config × class × core set as Rust jobs on all cores (`run_sa_jobs`) and emits `Panel_*.xlsx`.
 2. **WASM web app** (`wasm-port/web/`, deployed to GitHub Pages) — Svelte 5 SPA + `wasm-port/ndm_core/` Rust kernel (wasm-bindgen). Interactive; three run modes (Max / Targeted / Exact) with restart-chunk fan-out across a worker pool.
 
 **Optimizer 2.0:** both channels run the SAME tag-aware kernel —
@@ -76,7 +76,7 @@ src/
                  (PLACEABLE is mutated at import time when ALLOW_DELUXE)
   simulate.py    candidate_cores() enumerator, sa_optimize() (Rust call),
                  simulate() scoring kernel (runnable spec — unused at runtime)
-  main.py        optimize() orchestrator + multiprocessing entry (main())
+  main.py        solve() orchestrator (Rust jobs, halving) + CLI entry (main())
   report.py      terminal heatmaps, HNS metric, openpyxl spreadsheet export
 ndm_core/        PyO3 Rust crate exposing run_sa_optimize().
                  Built via maturin, declared as a regular dep in pyproject.
@@ -128,7 +128,7 @@ When adding a new tunable: add it to `config.yaml`, read it in `config.py` as a 
 
 ### Execution model (spreadsheet CLI)
 
-`src/main.py::main` runs each deck on its own process via `multiprocessing.Pool` (one worker per deck, capped at CPU count). Each worker iterates `_get_test_configs(deck)` (panel configs from `config.yaml`, or the deck's own `min_regular`/`max_greed` if `testing.full_panel: false`) and calls `optimize()`, which itself runs `candidate_cores × restarts` SA invocations per `CardClass`. Per-worker `random.seed()` is called for randomized starts. Reporting/spreadsheet generation happens back in the parent after all workers return.
+`src/main.py::main` builds one task per deck × panel config (`_get_test_configs`) × `CardClass` and calls `solve()`. `solve()` makes one tagged-kernel job per candidate core set (all restarts plus the phase-2 re-anneal run inside the job) and runs them all through `run_sa_jobs` (rayon, GIL released). With `testing.halving.enabled`, every core set is first screened on a small budget and only those within `margin` of the cell's leader (at least `keep_min`) get the full budget. The classic engine runs one job per restart with no phase 2 or halving. Budgets live in `config.yaml testing`; `scripts/bench_search.py` and `scripts/bench_panel.py` measure changes to them. Reporting/spreadsheet generation runs after all jobs return.
 
 ### Adding decks
 
