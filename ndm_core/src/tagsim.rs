@@ -327,6 +327,7 @@ pub struct TagRun<'a> {
     pub restarts: usize,
     pub seed: Option<u64>,
     pub sched: SaSchedule,
+    pub opts: SearchOpts,
     pub cfg: TagSimConfig,
 }
 
@@ -2001,52 +2002,339 @@ fn final_pass_nonfoil_evo(
 // SA — one restart
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_lines)]
+/// Search-time options beyond the schedule (all off = the 2.0 behaviour).
+/// `legal_only`: an illegal or no-op draw is redrawn instead of using up an
+/// iteration (capped at MAX_REDRAWS consecutive misses).
+/// `polish`: after the anneal, greedy first-improvement sweeps over every
+/// single-slot replacement and pair swap of the best layout.
+/// `phase2`: after all restarts, the `top_k` best layouts are each
+/// re-annealed from where they ended for `n_iter` more steps on `sched`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SearchOpts {
+    pub legal_only: bool,
+    pub polish: bool,
+    pub phase2: Option<Phase2>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Phase2 {
+    pub top_k: usize,
+    pub n_iter: usize,
+    pub sched: SaSchedule,
+}
+
+const MAX_REDRAWS: u32 = 64;
+const POLISH_ROUNDS: usize = 8;
+const DEAD_OPTION: usize = usize::MAX;
+
+/// Mutable search state of one layout: the assignment plus every counter the
+/// move rules read, and the incremental evaluator. Moves apply in place and
+/// score; the caller then accepts or undoes them.
+struct Walk<'a> {
+    geom: &'a Geom,
+    run: &'a TagRun<'a>,
+    cores: &'a Cores,
+    materialized: &'a [SlotCard],
+    asgn: Vec<SlotCard>,
+    remaining: Vec<u32>,
+    placed: Vec<u32>,
+    stat_placed: u32,
+    min_stat: u32,
+    rules: RuleBook,
+    deval: Option<DeltaEval>,
+    s: Scratch,
+    score: f64,
+    tmp_old: Vec<usize>,
+    tmp_new: Vec<usize>,
+}
+
+impl<'a> Walk<'a> {
+    fn new(
+        geom: &'a Geom,
+        run: &'a TagRun<'a>,
+        cores: &'a Cores,
+        materialized: &'a [SlotCard],
+        asgn: Vec<SlotCard>,
+        remaining: Vec<u32>,
+        rules: RuleBook,
+        min_stat: Option<u32>,
+    ) -> Self {
+        let cfg = &run.cfg;
+        let stat_placed = asgn.iter().filter(|c| counts_toward_floor(c, cfg)).count() as u32;
+        let mut placed = vec![0u32; run.stacks.len()];
+        for c in &asgn {
+            if c.t != T_DEAD && (c.stack as usize) < placed.len() {
+                placed[c.stack as usize] += 1;
+            }
+        }
+        let mut s = Scratch::new(geom);
+        let score = simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s);
+        // Incremental re-scoring (bit-exact — see the DeltaEval contract).
+        // CHAIN implicits score through global component topology, and tiny
+        // decks pay more in bookkeeping than a full pass costs; both keep the
+        // plain simulate() path.
+        let use_delta = geom.n >= DELTA_MIN_SLOTS
+            && !run.implicits.iter().any(|imp| matches!(imp, Implicit::Chain { .. }));
+        let deval = if use_delta {
+            let d = DeltaEval::new(geom, &asgn, cores, &run.implicits, cfg);
+            debug_assert_eq!(d.score.to_bits(), score.to_bits());
+            Some(d)
+        } else { None };
+        Walk {
+            geom, run, cores, materialized, asgn, remaining, placed, stat_placed,
+            min_stat: min_stat.unwrap_or_else(|| run.min_stat_placed.min(stat_placed)),
+            rules, deval, s, score,
+            tmp_old: Vec::new(), tmp_new: Vec::new(),
+        }
+    }
+
+    fn eval(&mut self, changed: &[(usize, SlotCard)]) -> f64 {
+        let run = self.run;
+        match self.deval.as_mut() {
+            Some(d) => d.propose(self.geom, self.cores, &run.implicits, &run.cfg, &self.asgn, changed),
+            None => simulate(self.geom, &self.asgn, self.cores, &run.implicits, &run.cfg, &mut self.s),
+        }
+    }
+
+    fn accept(&mut self, new_score: f64) {
+        self.score = new_score;
+        if let Some(d) = self.deval.as_mut() { d.commit(); }
+    }
+
+    /// Restore the evaluator after `asgn` has been put back.
+    fn rollback_eval(&mut self) {
+        let run = self.run;
+        if let Some(d) = self.deval.as_mut() {
+            d.rollback(self.geom, self.cores, &run.implicits, &run.cfg, &self.asgn);
+        }
+    }
+
+    fn floor_blocks(&self, stat_delta: i32) -> bool {
+        self.min_stat > 0 && stat_delta < 0
+            && (self.stat_placed as i32 + stat_delta) < self.min_stat as i32
+    }
+
+    /// Replace slot p with stack `si` (DEAD_OPTION = empty it). None = the
+    /// move is illegal or a no-op (state untouched); Some = applied + scored.
+    fn replace(&mut self, p: usize, si: usize) -> Option<f64> {
+        let run = self.run;
+        let old = self.asgn[p];
+        let new = if si == DEAD_OPTION {
+            DEAD_CARD
+        } else {
+            if self.remaining[si] == 0 { return None; }
+            self.materialized[si]
+        };
+        if new == old { return None; }
+        let old_si = old.stack as usize;
+        if old.t != T_DEAD && old_si < run.stacks.len()
+            && self.placed[old_si] <= run.stacks[old_si].min_place {
+            return None;
+        }
+        let stat_delta = (counts_toward_floor(&new, &run.cfg) as i32)
+            - (counts_toward_floor(&old, &run.cfg) as i32);
+        if self.floor_blocks(stat_delta) { return None; }
+        if !self.rules.move_ok(&old, &new, &mut self.tmp_old, &mut self.tmp_new) { return None; }
+
+        self.rules.apply(&old, &new, &mut self.tmp_old);
+        if si != DEAD_OPTION && self.remaining[si] != u32::MAX { self.remaining[si] -= 1; }
+        if old.t != T_DEAD && old_si < self.remaining.len() && self.remaining[old_si] != u32::MAX {
+            self.remaining[old_si] += 1;
+        }
+        if old.t != T_DEAD && old_si < self.placed.len() { self.placed[old_si] -= 1; }
+        if si != DEAD_OPTION { self.placed[si] += 1; }
+        self.stat_placed = (self.stat_placed as i32 + stat_delta) as u32;
+        self.asgn[p] = new;
+        Some(self.eval(&[(p, old)]))
+    }
+
+    fn undo_replace(&mut self, p: usize, si: usize, old: SlotCard) {
+        let run = self.run;
+        let new = self.asgn[p];
+        let old_si = old.stack as usize;
+        let stat_delta = (counts_toward_floor(&new, &run.cfg) as i32)
+            - (counts_toward_floor(&old, &run.cfg) as i32);
+        self.rules.apply(&new, &old, &mut self.tmp_old);
+        if si != DEAD_OPTION {
+            if self.remaining[si] != u32::MAX { self.remaining[si] += 1; }
+            self.placed[si] -= 1;
+        }
+        if old.t != T_DEAD && old_si < self.remaining.len() {
+            if self.remaining[old_si] != u32::MAX { self.remaining[old_si] -= 1; }
+            self.placed[old_si] += 1;
+        }
+        self.stat_placed = (self.stat_placed as i32 - stat_delta) as u32;
+        self.asgn[p] = old;
+        self.rollback_eval();
+    }
+
+    /// Auto-placed arcane slot: swap among arcane stacks only (1.x rule;
+    /// per-stack placed counts are not tracked on this path).
+    fn replace_locked(&mut self, p: usize, si: usize) -> Option<f64> {
+        let old = self.asgn[p];
+        if old.t != T_ARCANE { return None; }
+        let new = self.materialized[si];
+        if new == old || self.remaining[si] == 0 { return None; }
+        if !self.rules.move_ok(&old, &new, &mut self.tmp_old, &mut self.tmp_new) { return None; }
+        let old_si = old.stack as usize;
+        self.rules.apply(&old, &new, &mut self.tmp_old);
+        if self.remaining[si] != u32::MAX { self.remaining[si] -= 1; }
+        if old_si < self.remaining.len() && self.remaining[old_si] != u32::MAX { self.remaining[old_si] += 1; }
+        self.asgn[p] = new;
+        Some(self.eval(&[(p, old)]))
+    }
+
+    fn undo_replace_locked(&mut self, p: usize, si: usize, old: SlotCard) {
+        let new = self.asgn[p];
+        let old_si = old.stack as usize;
+        self.rules.apply(&new, &old, &mut self.tmp_old);
+        if self.remaining[si] != u32::MAX { self.remaining[si] += 1; }
+        if old_si < self.remaining.len() && self.remaining[old_si] != u32::MAX { self.remaining[old_si] -= 1; }
+        self.asgn[p] = old;
+        self.rollback_eval();
+    }
+
+    fn swap(&mut self, p1: usize, p2: usize, locked: &[bool]) -> Option<f64> {
+        if self.asgn[p1] == self.asgn[p2] { return None; }
+        if locked[p1] || locked[p2] { return None; }
+        let legal = |arc: bool, t: u8| -> bool {
+            if arc { t == T_ARCANE || t == T_DEAD } else { t != T_ARCANE }
+        };
+        if !legal(self.geom.is_arcane_slot[p1], self.asgn[p2].t)
+            || !legal(self.geom.is_arcane_slot[p2], self.asgn[p1].t) {
+            return None;
+        }
+        let (o1, o2) = (self.asgn[p1], self.asgn[p2]);
+        self.asgn.swap(p1, p2);
+        Some(self.eval(&[(p1, o1), (p2, o2)]))
+    }
+
+    fn undo_swap(&mut self, p1: usize, p2: usize) {
+        self.asgn.swap(p1, p2);
+        self.rollback_eval();
+    }
+
+    /// Flip an assignable group bit (Targeted). Returns (score, adding,
+    /// stat_delta); rules/floor are only charged on accept (toggle_commit).
+    fn toggle(&mut self, p: usize, bit: u16) -> Option<(f64, bool, i32)> {
+        let run = self.run;
+        let c = self.asgn[p];
+        if !is_scorable(c.t) { return None; }
+        let adding = c.groups & bit == 0;
+        if !self.rules.toggle_ok(bit, adding) { return None; }
+        // Adding a category bit must keep the card's category set a subset
+        // of some REAL card's set (removal can't break subset legality).
+        if adding && !run.legal_combos.is_empty() {
+            let next_cats = (c.groups | bit) & ALL_CATEGORY_GROUPS;
+            if !run.legal_combos.iter().any(|&m| next_cats & !m == 0) { return None; }
+        }
+        // Non-stat bits (Resource/Temporal) flip the card's floor status.
+        let mut flipped = c;
+        flipped.groups ^= bit;
+        let stat_delta = (counts_toward_floor(&flipped, &run.cfg) as i32)
+            - (counts_toward_floor(&c, &run.cfg) as i32);
+        if self.floor_blocks(stat_delta) { return None; }
+        self.asgn[p].groups ^= bit;
+        Some((self.eval(&[(p, c)]), adding, stat_delta))
+    }
+
+    fn toggle_commit(&mut self, bit: u16, adding: bool, stat_delta: i32, new_score: f64) {
+        self.rules.toggle_apply(bit, adding);
+        self.stat_placed = (self.stat_placed as i32 + stat_delta) as u32;
+        self.accept(new_score);
+    }
+
+    fn undo_toggle(&mut self, p: usize, bit: u16) {
+        self.asgn[p].groups ^= bit;
+        self.rollback_eval();
+    }
+}
+
+/// Supply left and rule counts implied by a layout (for re-entering a walk
+/// at the best layout).
+fn ledger_for(run: &TagRun<'_>, asgn: &[SlotCard]) -> (Vec<u32>, RuleBook) {
+    let mut rules = RuleBook::new(&run.tag_rules);
+    rules.seed(asgn);
+    let mut remaining: Vec<u32> = run.stacks.iter().map(|sp| sp.count).collect();
+    for c in asgn {
+        let si = c.stack as usize;
+        if c.t != T_DEAD && si < remaining.len() && remaining[si] != u32::MAX {
+            remaining[si] = remaining[si].saturating_sub(1);
+        }
+    }
+    (remaining, rules)
+}
+
+/// Greedy first-improvement polish: every legal single-slot replacement and
+/// pair swap, repeated until a full round finds nothing (or POLISH_ROUNDS).
+fn polish(w: &mut Walk<'_>, locked: &[bool], regular: &[usize], arcane: &[usize]) {
+    let n = w.geom.n;
+    let better = |new: f64, cur: f64| new > cur + 1e-12 * cur.abs().max(1.0);
+    for _ in 0..POLISH_ROUNDS {
+        let mut improved = false;
+        for p in 0..n {
+            if locked[p] {
+                for &si in arcane {
+                    let old = w.asgn[p];
+                    if let Some(sc) = w.replace_locked(p, si) {
+                        if better(sc, w.score) { w.accept(sc); improved = true; }
+                        else { w.undo_replace_locked(p, si, old); }
+                    }
+                }
+                continue;
+            }
+            let opts = if w.geom.is_arcane_slot[p] { arcane } else { regular };
+            for k in 0..=opts.len() {
+                let si = if k == opts.len() { DEAD_OPTION } else { opts[k] };
+                let old = w.asgn[p];
+                if let Some(sc) = w.replace(p, si) {
+                    if better(sc, w.score) { w.accept(sc); improved = true; }
+                    else { w.undo_replace(p, si, old); }
+                }
+            }
+        }
+        for p1 in 0..n {
+            for p2 in (p1 + 1)..n {
+                if let Some(sc) = w.swap(p1, p2, locked) {
+                    if better(sc, w.score) { w.accept(sc); improved = true; }
+                    else { w.undo_swap(p1, p2); }
+                }
+            }
+        }
+        if !improved { break; }
+    }
+}
+
 fn sa_one_restart(
     geom: &Geom,
     run: &TagRun<'_>,
     cores: &Cores,
     materialized: &[SlotCard],
     seed: u64,
+    n_iter: usize,
+    sched: SaSchedule,
+    start: Option<&[SlotCard]>,
 ) -> (Vec<SlotCard>, f64) {
     let mut rng = SmallRng::seed_from_u64(seed);
     let n = geom.n;
     let cfg = &run.cfg;
 
-    let mut remaining: Vec<u32> = run.stacks.iter().map(|sp| sp.count).collect();
-    let mut rules = RuleBook::new(&run.tag_rules);
-    let mut asgn = initial_fill(geom, run, materialized, &mut remaining, &mut rules);
-
-    // Stat floor bookkeeping (min_stat_placed).
-    let mut stat_placed: u32 = asgn.iter()
-        .filter(|c| counts_toward_floor(c, cfg)).count() as u32;
-    let effective_min_stat = run.min_stat_placed.min(stat_placed);
-
-    // Per-stack min accounting: placed count per stack (for min_place floors).
-    let mut placed_per_stack: Vec<u32> = vec![0; run.stacks.len()];
-    for c in &asgn {
-        if c.t != T_DEAD && (c.stack as usize) < placed_per_stack.len() {
-            placed_per_stack[c.stack as usize] += 1;
+    let (asgn, remaining, rules) = match start {
+        Some(a) => {
+            let (remaining, rules) = ledger_for(run, a);
+            (a.to_vec(), remaining, rules)
         }
-    }
-
-    let mut s = Scratch::new(geom);
-    let mut score = simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s);
-    let mut best_score = score;
-    let mut best_asgn = asgn.clone();
-
-    // Incremental re-scoring (bit-exact — see the DeltaEval contract).
-    // CHAIN implicits score through global component topology, and tiny
-    // decks pay more in bookkeeping than a full pass costs; both keep the
-    // plain simulate() path.
-    let use_delta = n >= DELTA_MIN_SLOTS
-        && !run.implicits.iter()
-            .any(|imp| matches!(imp, Implicit::Chain { .. }));
-    let mut deval = if use_delta {
-        let d = DeltaEval::new(geom, &asgn, cores, &run.implicits, cfg);
-        debug_assert_eq!(d.score.to_bits(), score.to_bits());
-        Some(d)
-    } else { None };
+        None => {
+            let mut remaining: Vec<u32> = run.stacks.iter().map(|sp| sp.count).collect();
+            let mut rules = RuleBook::new(&run.tag_rules);
+            let asgn = initial_fill(geom, run, materialized, &mut remaining, &mut rules);
+            (asgn, remaining, rules)
+        }
+    };
+    let mut w = Walk::new(geom, run, cores, materialized, asgn, remaining, rules, None);
+    let effective_min_stat = w.min_stat;
+    let mut best_score = w.score;
+    let mut best_asgn = w.asgn.clone();
 
     // Proposal alphabets.
     let mut regular_options: Vec<usize> = Vec::new();
@@ -2055,7 +2343,6 @@ fn sa_one_restart(
         if spec.t == T_ARCANE { arcane_options.push(si); }
         else { regular_options.push(si); }
     }
-    let dead_option = usize::MAX;
 
     // Assignable group bits (Targeted toggle moves).
     let assignable_bits: Vec<u16> = (0..N_GROUP_BITS)
@@ -2072,220 +2359,87 @@ fn sa_one_restart(
         }
     }
 
-    let mut temper = Temper::new(run.sched, run.n_iter, score);
-    let mut tmp_old = Vec::new();
-    let mut tmp_new = Vec::new();
+    let mut temper = Temper::new(sched, n_iter, w.score);
+    let mut it = 0usize;
+    let mut misses = 0u32;
 
-    for it in 0..run.n_iter {
+    while it < n_iter {
         temper.step(it);
         let roll: f64 = rng.gen();
 
-        if roll < toggle_prob {
-            // ── Toggle move: flip an assignable group bit on a slot ──────
-            let p = rng.gen_range(0..n);
-            let c = asgn[p];
-            if !is_scorable(c.t) { continue; }
-            let bit = assignable_bits[rng.gen_range(0..assignable_bits.len())];
-            let adding = c.groups & bit == 0;
-            if !rules.toggle_ok(bit, adding) { continue; }
-            // Adding a category bit must keep the card's category set a
-            // subset of some REAL card's set (removal can't break subset
-            // legality). Wild never reaches here (not scorable).
-            if adding && !run.legal_combos.is_empty() {
-                let next_cats = (c.groups | bit) & ALL_CATEGORY_GROUPS;
-                if !run.legal_combos.iter().any(|&m| next_cats & !m == 0) {
-                    continue;
-                }
-            }
-            // Non-stat bits (Resource/Temporal) flip the card's floor status.
-            let mut flipped = c;
-            flipped.groups ^= bit;
-            let stat_delta = (counts_toward_floor(&flipped, cfg) as i32)
-                - (counts_toward_floor(&c, cfg) as i32);
-            if effective_min_stat > 0 && stat_delta < 0
-                && (stat_placed as i32 + stat_delta) < effective_min_stat as i32 {
-                continue;
-            }
-            asgn[p].groups ^= bit;
-            let new_score = match deval.as_mut() {
-                Some(d) => d.propose(geom, cores, &run.implicits, cfg, &asgn, &[(p, c)]),
-                None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
-            };
-            let delta = new_score - score;
-            if temper.accept(delta, &mut rng) {
-                rules.toggle_apply(bit, adding);
-                stat_placed = (stat_placed as i32 + stat_delta) as u32;
-                score = new_score;
-                if score > best_score { best_score = score; best_asgn = asgn.clone(); }
-                if let Some(d) = deval.as_mut() { d.commit(); }
-            } else {
-                asgn[p].groups ^= bit;
-                if let Some(d) = deval.as_mut() {
-                    d.rollback(geom, cores, &run.implicits, cfg, &asgn);
-                }
-            }
-        } else if n < 2 || roll < 0.80 + toggle_prob * 0.25 {
-            // ── Replace move ─────────────────────────────────────────────
-            let p = rng.gen_range(0..n);
-            if locked[p] {
-                // Auto-place ON: arcane slots may still swap colors among
-                // arcane stacks (mirrors 1.x behavior).
-                if arcane_options.len() < 2 { continue; }
-                let si = arcane_options[rng.gen_range(0..arcane_options.len())];
-                let old = asgn[p];
-                if old.t != T_ARCANE { continue; }   // stayed DEAD from init (no supply)
-                let new = materialize(&run.stacks[si], si, run, cores.foil_active, false);
-                if new == old { continue; }
-                if remaining[si] == 0 { continue; }
-                if !rules.move_ok(&old, &new, &mut tmp_old, &mut tmp_new) { continue; }
-                let old_si = old.stack as usize;
-                rules.apply(&old, &new, &mut tmp_old);
-                if remaining[si] != u32::MAX { remaining[si] -= 1; }
-                if old_si < remaining.len() && remaining[old_si] != u32::MAX { remaining[old_si] += 1; }
-                asgn[p] = new;
-                let new_score = match deval.as_mut() {
-                    Some(d) => d.propose(geom, cores, &run.implicits, cfg, &asgn, &[(p, old)]),
-                    None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
-                };
-                let delta = new_score - score;
-                if temper.accept(delta, &mut rng) {
-                    score = new_score;
-                    if score > best_score { best_score = score; best_asgn = asgn.clone(); }
-                    if let Some(d) = deval.as_mut() { d.commit(); }
+        // Each arm yields whether a proposal was scored (false = illegal or
+        // no-op draw, which legal_only redraws without spending the step).
+        let scored: bool = 'prop: {
+            if roll < toggle_prob {
+                let p = rng.gen_range(0..n);
+                if !is_scorable(w.asgn[p].t) { break 'prop false; }
+                let bit = assignable_bits[rng.gen_range(0..assignable_bits.len())];
+                let Some((sc, adding, stat_delta)) = w.toggle(p, bit) else { break 'prop false };
+                if temper.accept(sc - w.score, &mut rng) {
+                    w.toggle_commit(bit, adding, stat_delta, sc);
                 } else {
-                    rules.apply(&new, &old, &mut tmp_old);
-                    if remaining[si] != u32::MAX { remaining[si] += 1; }
-                    if old_si < remaining.len() && remaining[old_si] != u32::MAX { remaining[old_si] -= 1; }
-                    asgn[p] = old;
-                    if let Some(d) = deval.as_mut() {
-                        d.rollback(geom, cores, &run.implicits, cfg, &asgn);
-                    }
+                    w.undo_toggle(p, bit);
                 }
-                continue;
-            }
-
-            let old = asgn[p];
-            // Choose from: regular stacks (or arcane stacks for arcane
-            // slots when auto-place OFF) + DEAD.
-            let (opts, allow_dead) = if geom.is_arcane_slot[p] {
-                (&arcane_options, true)
+            } else if n < 2 || roll < 0.80 + toggle_prob * 0.25 {
+                let p = rng.gen_range(0..n);
+                let old = w.asgn[p];
+                if locked[p] {
+                    // Auto-place ON: arcane slots may still swap colors among
+                    // arcane stacks (mirrors 1.x behavior).
+                    if arcane_options.len() < 2 { break 'prop false; }
+                    let si = arcane_options[rng.gen_range(0..arcane_options.len())];
+                    let Some(sc) = w.replace_locked(p, si) else { break 'prop false };
+                    if temper.accept(sc - w.score, &mut rng) { w.accept(sc); }
+                    else { w.undo_replace_locked(p, si, old); }
+                } else {
+                    // Regular stacks (or arcane stacks for arcane slots when
+                    // auto-place is OFF) + DEAD.
+                    let opts = if geom.is_arcane_slot[p] { &arcane_options } else { &regular_options };
+                    let pick = rng.gen_range(0..opts.len() + 1);
+                    let si = if pick == opts.len() { DEAD_OPTION } else { opts[pick] };
+                    let Some(sc) = w.replace(p, si) else { break 'prop false };
+                    if temper.accept(sc - w.score, &mut rng) { w.accept(sc); }
+                    else { w.undo_replace(p, si, old); }
+                }
             } else {
-                (&regular_options, true)
-            };
-            let pick = rng.gen_range(0..opts.len() + usize::from(allow_dead));
-            let si = if pick == opts.len() { dead_option } else { opts[pick] };
-
-            let new = if si == dead_option {
-                DEAD_CARD
-            } else {
-                if remaining[si] == 0 { continue; }
-                materialize(&run.stacks[si], si, run, cores.foil_active, false)
-            };
-            if new == old { continue; }
-
-            // Per-stack min_place floor on the outgoing card.
-            let old_si = old.stack as usize;
-            if old.t != T_DEAD && old_si < run.stacks.len()
-                && placed_per_stack[old_si] <= run.stacks[old_si].min_place {
-                continue;
+                let p1 = rng.gen_range(0..n);
+                let mut p2 = rng.gen_range(0..n);
+                while p2 == p1 { p2 = rng.gen_range(0..n); }
+                let Some(sc) = w.swap(p1, p2, &locked) else { break 'prop false };
+                if temper.accept(sc - w.score, &mut rng) { w.accept(sc); }
+                else { w.undo_swap(p1, p2); }
             }
-            // Stat floor.
-            let old_stat = counts_toward_floor(&old, cfg);
-            let new_stat = counts_toward_floor(&new, cfg);
-            let stat_delta = (new_stat as i32) - (old_stat as i32);
-            if effective_min_stat > 0 && stat_delta < 0
-                && (stat_placed as i32 + stat_delta) < effective_min_stat as i32 {
-                continue;
+            if w.score > best_score {
+                best_score = w.score;
+                best_asgn.copy_from_slice(&w.asgn);
             }
-            if !rules.move_ok(&old, &new, &mut tmp_old, &mut tmp_new) { continue; }
+            true
+        };
 
-            // Apply.
-            rules.apply(&old, &new, &mut tmp_old);
-            if si != dead_option && remaining[si] != u32::MAX { remaining[si] -= 1; }
-            if old.t != T_DEAD && old_si < remaining.len() && remaining[old_si] != u32::MAX {
-                remaining[old_si] += 1;
-            }
-            if old.t != T_DEAD && old_si < placed_per_stack.len() { placed_per_stack[old_si] -= 1; }
-            if si != dead_option { placed_per_stack[si] += 1; }
-            stat_placed = (stat_placed as i32 + stat_delta) as u32;
-            asgn[p] = new;
-
-            let new_score = match deval.as_mut() {
-                Some(d) => d.propose(geom, cores, &run.implicits, cfg, &asgn, &[(p, old)]),
-                None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
-            };
-            let delta = new_score - score;
-            if temper.accept(delta, &mut rng) {
-                score = new_score;
-                if score > best_score { best_score = score; best_asgn = asgn.clone(); }
-                if let Some(d) = deval.as_mut() { d.commit(); }
-            } else {
-                rules.apply(&new, &old, &mut tmp_old);
-                if si != dead_option {
-                    if remaining[si] != u32::MAX { remaining[si] += 1; }
-                    placed_per_stack[si] -= 1;
-                }
-                if old.t != T_DEAD && old_si < remaining.len() {
-                    if remaining[old_si] != u32::MAX { remaining[old_si] -= 1; }
-                    placed_per_stack[old_si] += 1;
-                }
-                stat_placed = (stat_placed as i32 - stat_delta) as u32;
-                asgn[p] = old;
-                if let Some(d) = deval.as_mut() {
-                    d.rollback(geom, cores, &run.implicits, cfg, &asgn);
-                }
-            }
+        if scored || !run.opts.legal_only {
+            it += 1;
+            misses = 0;
         } else {
-            // ── Pair swap ────────────────────────────────────────────────
-            let p1 = rng.gen_range(0..n);
-            let mut p2 = rng.gen_range(0..n);
-            while p2 == p1 { p2 = rng.gen_range(0..n); }
-            if asgn[p1] == asgn[p2] { continue; }
-            if locked[p1] || locked[p2] { continue; }
-            let a1 = geom.is_arcane_slot[p1];
-            let a2 = geom.is_arcane_slot[p2];
-            let v1 = asgn[p2].t;
-            let v2 = asgn[p1].t;
-            let legal = |arc: bool, t: u8| -> bool {
-                if arc { t == T_ARCANE || t == T_DEAD } else { t != T_ARCANE }
-            };
-            if !legal(a1, v1) || !legal(a2, v2) { continue; }
+            misses += 1;
+            if misses >= MAX_REDRAWS { it += 1; misses = 0; }
+        }
+    }
 
-            let o1 = asgn[p1];
-            let o2 = asgn[p2];
-            asgn.swap(p1, p2);
-            let new_score = match deval.as_mut() {
-                Some(d) => d.propose(
-                    geom, cores, &run.implicits, cfg, &asgn, &[(p1, o1), (p2, o2)],
-                ),
-                None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
-            };
-            let delta = new_score - score;
-            if temper.accept(delta, &mut rng) {
-                score = new_score;
-                if score > best_score { best_score = score; best_asgn = asgn.clone(); }
-                if let Some(d) = deval.as_mut() { d.commit(); }
-            } else {
-                asgn.swap(p1, p2);
-                if let Some(d) = deval.as_mut() {
-                    d.rollback(geom, cores, &run.implicits, cfg, &asgn);
-                }
-            }
+    if run.opts.polish {
+        let (remaining, rules) = ledger_for(run, &best_asgn);
+        let mut pw = Walk::new(geom, run, cores, materialized, best_asgn.clone(), remaining,
+                               rules, Some(effective_min_stat));
+        polish(&mut pw, &locked, &regular_options, &arcane_options);
+        if pw.score > best_score {
+            best_score = pw.score;
+            best_asgn = pw.asgn;
         }
     }
 
     // §6 final pass — deterministic post-step on the best assignment.
     if run.final_pass_nonfoil_evo && !cfg.is_shiny && cores.foil_active {
-        // Rebuild rule counts + remaining for the BEST assignment.
-        let mut rules2 = RuleBook::new(&run.tag_rules);
-        rules2.seed(&best_asgn);
-        let mut remaining2: Vec<u32> = run.stacks.iter().map(|sp| sp.count).collect();
-        for c in &best_asgn {
-            let si = c.stack as usize;
-            if c.t != T_DEAD && si < remaining2.len() && remaining2[si] != u32::MAX {
-                remaining2[si] = remaining2[si].saturating_sub(1);
-            }
-        }
+        let (mut remaining2, mut rules2) = ledger_for(run, &best_asgn);
+        let mut s = Scratch::new(geom);
         final_pass_nonfoil_evo(
             geom, run, &mut best_asgn, &mut best_score, cores,
             &mut rules2, &mut remaining2, &mut s,
@@ -2326,21 +2480,27 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
         .collect();
 
     let restarts = run.restarts.max(1);
-    let mut best: Option<(Vec<SlotCard>, f64)> = None;
-    for i in 0..restarts {
-        let seed = match run.seed {
-            Some(s0) => s0 ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15),
-            None => {
-                let mut seeder = SmallRng::from_entropy();
-                seeder.gen::<u64>() ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
-            }
-        };
-        let (asgn, score) = sa_one_restart(&geom, &run, &cores, &materialized, seed);
-        if best.as_ref().map_or(true, |b| score > b.1) {
-            best = Some((asgn, score));
+    let base = run.seed.unwrap_or_else(|| SmallRng::from_entropy().gen::<u64>());
+    let mut ends: Vec<(Vec<SlotCard>, f64)> = (0..restarts).map(|i| {
+        let seed = base ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        sa_one_restart(&geom, &run, &cores, &materialized, seed, run.n_iter, run.sched, None)
+    }).collect();
+
+    if let Some(p2) = run.opts.phase2 {
+        ends.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let top = p2.top_k.min(ends.len());
+        for j in 0..top {
+            let seed = base ^ 0xD1B5_4A32_D192_ED03 ^ (j as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let start = ends[j].0.clone();
+            let r = sa_one_restart(&geom, &run, &cores, &materialized, seed,
+                                   p2.n_iter, p2.sched, Some(&start));
+            ends.push(r);
         }
     }
-    best.expect("at least one restart")
+    ends.into_iter().fold(None::<(Vec<SlotCard>, f64)>, |best, r| match best {
+        Some(b) if b.1 >= r.1 => Some(b),
+        _ => Some(r),
+    }).expect("at least one restart")
 }
 
 /// Score a FIXED assignment (no SA). Used by the parity harness, the TS
@@ -2525,6 +2685,7 @@ mod delta_tests {
                 restarts: 1,
                 seed: None,
                 sched: SCHEDULE_LEGACY,
+                opts: SearchOpts::default(),
                 cfg: cfg_v,
             };
             let geom = build_geom(&run);
@@ -2619,6 +2780,7 @@ mod delta_tests {
             restarts: 1,
             seed: Some(42),
             sched: SCHEDULE_LEGACY,
+            opts: SearchOpts::default(),
             cfg,
         };
         let (asgn, score) = run_sa_tagged(run);

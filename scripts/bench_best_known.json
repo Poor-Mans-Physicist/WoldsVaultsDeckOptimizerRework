@@ -1,9 +1,10 @@
 {
  "The Arcane Deck | unconstrained | evo | archive_core+color+foil+pure": 96.47736422399997,
+ "The Cactus Deck | min 8 reg | evo | color+foil+pure+void_core": 3408.0,
  "The Crate Deck | min 14 reg | evo | color+foil+pure": 2814.2400000000007,
  "The Crate Deck | unconstrained | evo | color+deluxe_core+foil": 2767.9999999999995,
  "The Crate Deck | unconstrained | evo | color+foil": 2340.0,
- "The Crate Deck | unconstrained | evo | deluxe_core+foil+pure": 3135.800000000001,
+ "The Crate Deck | unconstrained | evo | deluxe_core+foil+pure": 3180.740000000001,
  "The Crate Deck | unconstrained | evo | deluxe_core+foil+void_core": 2688.8,
  "The Crate Deck | unconstrained | shiny | deluxe_core+equilibrium+pure": 3456.800000000001,
  "The Crate Deck | unconstrained | shiny | deluxe_core+pure+void_core": 2499.56,
@@ -11,7 +12,9 @@
  "The Mutant Deck | unconstrained | shiny | deluxe_core+equilibrium+foil+pure": 3780.99,
  "The Mystery Deck | unconstrained | evo | archive_core+foil": 1344.6000000000004,
  "The Mystery Deck | unconstrained | shiny | equilibrium+pure": 2104.38,
+ "The Puzzle Deck | min 8 reg | shiny | deluxe_core+pure+void_core": 2386.28,
  "The Rook Deck | unconstrained | evo | deluxe_core+foil+void_core": 3300.0,
+ "The Shadow Deck | min 14 reg | shiny | archive_core+pure+void_core": 873.1799999999998,
  "The Snake Deck | unconstrained | evo | deluxe_core+foil+pure": 4056.650000000001,
  "The Velara Deck | no greed | shiny | equilibrium+foil+pure": 958.5,
  "The Velara Deck | unconstrained | evo | color+foil": 2569.5,
@@ -19,5 +22,6 @@
  "The Velara Deck | unconstrained | shiny | deluxe_core+equilibrium+foil": 3752.2999999999997,
  "The Velara Deck | unconstrained | shiny | equilibrium+foil+sparkling": 4139.75,
  "The Velara Deck | unconstrained | shiny | equilibrium+foil+void_core": 3920.15,
- "The Velara Deck | unconstrained | shiny | equilibrium+pure+void_core": 3771.04
+ "The Velara Deck | unconstrained | shiny | equilibrium+pure+void_core": 3771.04,
+ "The Villager Deck | min 14 reg | evo | color+foil+pure": 1423.0799999999997
 }

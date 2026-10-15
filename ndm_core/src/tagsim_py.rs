@@ -10,8 +10,8 @@ use crate::tagsim::{
     group_bit_from_str, group_bits_to_strs, run_sa_tagged as run_core,
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
-    CoreSpecIn, Implicit, SaSchedule, SlotCard, TagAxis, TagRule, TagRun,
-    TagSimConfig, COLOR_NONE, SCHEDULE_LEGACY,
+    CoreSpecIn, Implicit, Phase2, SaSchedule, SearchOpts, SlotCard, TagAxis, TagRule,
+    TagRun, TagSimConfig, COLOR_NONE, SCHEDULE_LEGACY,
 };
 
 /// Stack tuple: (type, color, scale_color, groups, count, min_place).
@@ -138,14 +138,37 @@ fn build_run<'a>(
     restarts: usize,
     seed: Option<u64>,
     sched: SaSchedule,
+    opts: SearchOpts,
     cfg: TagSimConfig,
 ) -> TagRun<'a> {
     TagRun {
         slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, stacks, tag_rules, blanket_groups,
         assignable_groups, legal_combos, implicits, cores, min_stat_placed,
-        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, cfg,
+        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, opts, cfg,
     }
+}
+
+/// Search option flags (any of "legal_only", "polish") plus the optional
+/// phase-2 spec `(top_k, n_iter, schedule kind, schedule params)`.
+fn parse_search_opts(
+    flags: &Option<Vec<String>>,
+    phase2: &Option<(usize, usize, String, Vec<f64>)>,
+) -> PyResult<SearchOpts> {
+    let mut o = SearchOpts::default();
+    if let Some((top_k, n_iter, kind, params)) = phase2 {
+        let sched = parse_schedule(&Some((kind.clone(), params.clone())))?;
+        o.phase2 = Some(Phase2 { top_k: *top_k, n_iter: *n_iter, sched });
+    }
+    for f in flags.iter().flatten() {
+        match f.as_str() {
+            "legal_only" => o.legal_only = true,
+            "polish" => o.polish = true,
+            other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "unknown search option {other:?}: want legal_only / polish"))),
+        }
+    }
+    Ok(o)
 }
 
 /// `("geometric", [t0, t1])` or `("target", [a0, a1, t_init, eta])`;
@@ -185,6 +208,7 @@ pub struct TaggedJob {
     restarts: usize,
     seed: Option<u64>,
     sched: SaSchedule,
+    opts: SearchOpts,
     cfg: TagSimConfig,
 }
 
@@ -197,7 +221,7 @@ impl TaggedJob {
             self.tag_rules.clone(), self.blanket_groups, self.assignable_groups,
             self.legal_combos.clone(), self.implicits.clone(), self.cores.clone(),
             self.min_stat_placed, self.final_pass_nonfoil_evo, self.exact_groups,
-            self.n_iter, self.restarts, self.seed, self.sched, self.cfg,
+            self.n_iter, self.restarts, self.seed, self.sched, self.opts, self.cfg,
         ))
     }
 }
@@ -224,7 +248,7 @@ fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny, auto_place_arcane,
     colors_real, complex_cards, wv_foil_rules, floor_counts_deluxe,
-    seed = None, legal_combos = None, schedule = None, defer = false,
+    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, defer = false,
 ))]
 pub fn run_sa_tagged(
     py: Python<'_>,
@@ -271,6 +295,8 @@ pub fn run_sa_tagged(
     seed: Option<u64>,
     legal_combos: Option<Vec<Vec<String>>>,
     schedule: Option<(String, Vec<f64>)>,
+    search_opts: Option<Vec<String>>,
+    phase2: Option<(usize, usize, String, Vec<f64>)>,
     defer: bool,
 ) -> PyResult<PyObject> {
     let cfg = TagSimConfig {
@@ -300,6 +326,7 @@ pub fn run_sa_tagged(
         cores: cores_in, min_stat_placed, final_pass_nonfoil_evo, exact_groups,
         n_iter, restarts, seed,
         sched: parse_schedule(&schedule)?,
+        opts: parse_search_opts(&search_opts, &phase2)?,
         cfg,
     };
     if defer {
@@ -372,7 +399,7 @@ pub fn score_tagged(
         &slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, Vec::new(), Vec::new(), 0, 0, Vec::new(),
         parse_implicits(&implicits), cores_in, 0, false, true, 0, 1, None,
-        SCHEDULE_LEGACY, cfg,
+        SCHEDULE_LEGACY, SearchOpts::default(), cfg,
     );
 
     Ok(score_core(&run, &placed_from_py(&assignment)))

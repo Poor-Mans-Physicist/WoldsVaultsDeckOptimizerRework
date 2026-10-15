@@ -1020,6 +1020,7 @@ mod sa_bench {
             restarts: 1,
             seed: Some(42),
             sched: SCHEDULE_LEGACY,
+            opts: SearchOpts::default(),
             cfg: TagSimConfig {
                 mult_dir_vert: 4.0,
                 mult_dir_horiz: 4.0,

@@ -30,15 +30,54 @@ problems:
   - { deck: The Arcane Deck,  panel: unconstrained, cls: evo,   cores: [archive_core, color, foil, pure] }   # 11 slots → no delta
   - { deck: The Mutant Deck,  panel: unconstrained, cls: shiny, cores: [deluxe_core, equilibrium, foil, pure] }
   - { deck: The Rook Deck,    panel: unconstrained, cls: evo,   cores: [deluxe_core, foil, void_core] }
+  # Binding stat floor (parity Part B stragglers, 2026-10-15).
+  - { deck: The Shadow Deck,  panel: min 14 reg,    cls: shiny, cores: [archive_core, pure, void_core] }
+  - { deck: The Villager Deck, panel: min 14 reg,   cls: evo,   cores: [color, foil, pure] }
+  - { deck: The Cactus Deck,  panel: min 8 reg,     cls: evo,   cores: [color, foil, pure, void_core] }
+  - { deck: The Puzzle Deck,  panel: min 8 reg,     cls: shiny, cores: [deluxe_core, pure, void_core] }
 
-# Search configs. schedule = [kind, params] as in config.yaml testing.schedule.
+# Search configs. schedule = [kind, params] as in config.yaml testing.schedule;
+# opts = search option flags (legal_only, polish).
 configs:
   geo_60k:      { n_iter: 60000,  restarts: 12, schedule: [geometric, [100.0, 0.5]] }
   geo_120k:     { n_iter: 120000, restarts: 12, schedule: [geometric, [100.0, 0.5]] }
   tgt_30k:      { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
   tgt_60k:      { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
   tgt_120k:     { n_iter: 120000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+  tgt_60k_L:    { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only] }
+  tgt_60k_P:    { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [polish] }
+  tgt_60k_LP:   { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish] }
+  tgt_30k_LP:   { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish] }
+  tgt_120k_LP:  { n_iter: 120000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish] }
+  # Two-phase: restarts, then the top K re-annealed (phase2 = [top_k, n_iter, kind, params]).
+  p2_cool:      { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_reheat:    { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.5, 0.001, 0.02, 0.01]] }
+  p2_wide:      { n_iter: 45000,  restarts: 16, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_top2:      { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [2, 360000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_cool_LP:   { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_cool_P:    { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [polish], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_cool_L:    { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only], phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_cool_big:  { n_iter: 75000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 225000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_top2_LP:   { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], opts: [legal_only, polish], phase2: [2, 360000, target, [0.1, 0.001, 0.005, 0.01]] }
+  tgt_150k:     { n_iter: 150000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+  p2_720k:      { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_720k_w:    { n_iter: 22500,  restarts: 16, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]] }
+  p2_720k_t2:   { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]], phase2: [2, 180000, target, [0.1, 0.001, 0.005, 0.01]] }
 
 # Long runs that only feed best-known (run with --reference).
 reference:
   geo_1m:       { n_iter: 1000000, restarts: 8, schedule: [geometric, [100.0, 0.5]] }
+
+# Panel strategies (scripts/bench_panel.py): full spreadsheet runs.
+# halving = screen every core set, full budget only near the cell's leader.
+panel:
+  full:      { n_iter: 30000, restarts: 12, phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]] }
+  halv_m03:  { n_iter: 30000, restarts: 12, phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.03, keep_min: 3 } }
+  halv_m05:  { n_iter: 30000, restarts: 12, phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 } }
+  halv_m02k2: { n_iter: 30000, restarts: 12, phase2: [4, 90000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.02, keep_min: 2 } }
+  halv_m05x2: { n_iter: 60000, restarts: 12, phase2: [4, 180000, target, [0.1, 0.001, 0.005, 0.01]],
+               halving: { restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 } }
+  ref:       { n_iter: 60000, restarts: 16, phase2: [4, 360000, target, [0.1, 0.001, 0.005, 0.01]] }

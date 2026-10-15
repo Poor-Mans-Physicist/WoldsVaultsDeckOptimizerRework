@@ -28,7 +28,7 @@ cd WoldsVaultsDeckOptimizer
 uv run optimize
 ```
 
-The first run compiles the Rust kernel (a minute or two); later runs start immediately. One process per deck runs in parallel, then a summary prints and the spreadsheet is written.
+The first run compiles the Rust kernel (a minute or two); later runs start immediately. Every deck × panel config × class × core set runs as a Rust job on all cores (core sets are screened first and only those near the cell's leader get the full two-phase budget; see `config.yaml testing`), then a summary prints and the spreadsheet is written. The full panel takes about 25 s.
 
 ### Flags
 
@@ -55,6 +55,7 @@ Layout-grid legend: `R`/`C`/`S`/`X` = row/col/surround/diagonal scaling cards, `
 - `uv run python scripts/implicit_impact.py` — one-pass balance leaderboard (screenshot-ready HTML + markdown) plus a second **balance-settings cycle-log sheet** (every core / implicit / greed / structural value that produced the numbers). The log is regenerated from live config on every run and must always accompany the leaderboard so balance cycles stay trackable — never hand-edit it. `--compare` runs the implicit on/off diff instead.
 - `uv run python scripts/parity_2_0.py [--fast]` — validation gate: Part A proves the Python reference and the tagged kernel score identically; Part B checks the tagged SA finds at least what the classic SA finds (one-sided, re-scored, ~4 min full on all cores).
 - `uv run python scripts/bench_search.py` — search-quality bench: gap to best-known per (deck, panel, class, core set) for each search config in `scripts/bench_search.yaml`; `--reference` adds long runs that only raise best-known. Run it before changing SA defaults.
+- `uv run python scripts/bench_panel.py` — panel bench: gap per spreadsheet cell to best-known (`scripts/bench_panel_best.json`) for each strategy under `panel:` in `scripts/bench_search.yaml`. Run it before changing the budget or halving settings.
 
 ## Repo layout
 

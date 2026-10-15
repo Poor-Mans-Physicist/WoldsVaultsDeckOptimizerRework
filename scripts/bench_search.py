@@ -63,15 +63,21 @@ def run_config(resolved, cname, cfg, reps):
     """All replicates × restarts of one config as Rust jobs (run_sa_jobs,
     all cores). Returns ([(pid, rep, best score)], wall seconds)."""
     sched = (cfg["schedule"][0], [float(v) for v in cfg["schedule"][1]])
+    p2 = cfg.get("phase2")
+    p2 = (int(p2[0]), int(p2[1]), p2[2], [float(v) for v in p2[3]]) if p2 else None
+    # Phase-2 configs need every restart of a replicate in one kernel job
+    # (the top-K pick happens inside); plain configs run one job per restart.
+    per_job = cfg["restarts"] if p2 else 1
     keys, jobs = [], []
     for pid, (cdeck, cls, cores, imps) in resolved.items():
         for rep in range(reps):
-            for k in range(cfg["restarts"]):
+            for k in range(cfg["restarts"] // per_job):
                 seed = zlib.crc32(f"{pid}|{cname}|{rep}|{k}".encode())
                 keys.append((pid, rep))
                 jobs.append(sa_optimize_tagged(
                     cdeck, cls, cores, n_iter=cfg["n_iter"], implicits=imps,
-                    seed=seed, schedule=sched, defer=True,
+                    seed=seed, schedule=sched, search_opts=list(cfg.get("opts", [])),
+                    restarts=per_job, phase2=p2, defer=True,
                 ))
     t0 = time.perf_counter()
     outs = run_sa_jobs(jobs)

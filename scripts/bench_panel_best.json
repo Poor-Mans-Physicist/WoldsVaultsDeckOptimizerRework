@@ -1,0 +1,1218 @@
+{
+ "Double Deck | min 14 reg | evo": {
+  "score": 169.0,
+  "cores": "color+foil"
+ },
+ "Double Deck | min 14 reg | shiny": {
+  "score": 216.0,
+  "cores": "equilibrium+foil"
+ },
+ "Double Deck | min 8 reg | evo": {
+  "score": 377.0,
+  "cores": "color+foil"
+ },
+ "Double Deck | min 8 reg | shiny": {
+  "score": 522.0,
+  "cores": "equilibrium+foil"
+ },
+ "Double Deck | no greed | evo": {
+  "score": 169.0,
+  "cores": "color+foil"
+ },
+ "Double Deck | no greed | shiny": {
+  "score": 216.0,
+  "cores": "equilibrium+foil"
+ },
+ "Double Deck | unconstrained | evo": {
+  "score": 585.0,
+  "cores": "color+foil"
+ },
+ "Double Deck | unconstrained | shiny": {
+  "score": 810.0,
+  "cores": "equilibrium+foil"
+ },
+ "Expanded Deck | min 14 reg | evo": {
+  "score": 1279.0800000000006,
+  "cores": "color+foil+pure"
+ },
+ "Expanded Deck | min 14 reg | shiny": {
+  "score": 2052.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "Expanded Deck | min 8 reg | evo": {
+  "score": 2096.64,
+  "cores": "color+foil+pure"
+ },
+ "Expanded Deck | min 8 reg | shiny": {
+  "score": 3024.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "Expanded Deck | no greed | evo": {
+  "score": 623.6999999999998,
+  "cores": "color+foil+void_core"
+ },
+ "Expanded Deck | no greed | shiny": {
+  "score": 996.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "Expanded Deck | unconstrained | evo": {
+  "score": 2246.1300000000006,
+  "cores": "color+foil+pure"
+ },
+ "Expanded Deck | unconstrained | shiny": {
+  "score": 3186.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "Extended Deck | min 14 reg | evo": {
+  "score": 1347.4800000000005,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "Extended Deck | min 14 reg | shiny": {
+  "score": 2428.2000000000007,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Extended Deck | min 8 reg | evo": {
+  "score": 2197.44,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "Extended Deck | min 8 reg | shiny": {
+  "score": 3578.4,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Extended Deck | no greed | evo": {
+  "score": 656.1,
+  "cores": "archive_core+color+foil+void_core"
+ },
+ "Extended Deck | no greed | shiny": {
+  "score": 1178.6000000000001,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Extended Deck | unconstrained | evo": {
+  "score": 2352.33,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "Extended Deck | unconstrained | shiny": {
+  "score": 3770.1,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Idona's Deck | min 14 reg | evo": {
+  "score": 1783.1678080000006,
+  "cores": "archive_core+color+pure"
+ },
+ "Idona's Deck | min 14 reg | shiny": {
+  "score": 2003.6198560000003,
+  "cores": "archive_core+equilibrium+foil"
+ },
+ "Idona's Deck | min 8 reg | evo": {
+  "score": 2630.489984,
+  "cores": "archive_core+foil+pure"
+ },
+ "Idona's Deck | min 8 reg | shiny": {
+  "score": 2908.729984,
+  "cores": "archive_core+equilibrium+foil"
+ },
+ "Idona's Deck | no greed | evo": {
+  "score": 884.7779200000001,
+  "cores": "archive_core+color+pure"
+ },
+ "Idona's Deck | no greed | shiny": {
+  "score": 925.8180799999998,
+  "cores": "archive_core+equilibrium+foil"
+ },
+ "Idona's Deck | unconstrained | evo": {
+  "score": 2692.1399039999997,
+  "cores": "archive_core+foil+pure"
+ },
+ "Idona's Deck | unconstrained | shiny": {
+  "score": 2908.7299839999996,
+  "cores": "archive_core+equilibrium+foil"
+ },
+ "Large Deck | min 14 reg | evo": {
+  "score": 240.5,
+  "cores": "color+foil"
+ },
+ "Large Deck | min 14 reg | shiny": {
+  "score": 270.0,
+  "cores": "equilibrium+foil"
+ },
+ "Large Deck | min 8 reg | evo": {
+  "score": 689.0,
+  "cores": "color+foil"
+ },
+ "Large Deck | min 8 reg | shiny": {
+  "score": 805.5,
+  "cores": "equilibrium+foil"
+ },
+ "Large Deck | no greed | evo": {
+  "score": 240.5,
+  "cores": "color+foil"
+ },
+ "Large Deck | no greed | shiny": {
+  "score": 279.0,
+  "cores": "equilibrium+foil"
+ },
+ "Large Deck | unconstrained | evo": {
+  "score": 757.25,
+  "cores": "color+foil"
+ },
+ "Large Deck | unconstrained | shiny": {
+  "score": 990.0,
+  "cores": "equilibrium+foil"
+ },
+ "Merchant's Deck | min 14 reg | evo": {
+  "score": 1160.144,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "Merchant's Deck | min 14 reg | shiny": {
+  "score": 1753.7000000000003,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Merchant's Deck | min 8 reg | evo": {
+  "score": 1538.424,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "Merchant's Deck | min 8 reg | shiny": {
+  "score": 2146.7,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Merchant's Deck | no greed | evo": {
+  "score": 494.29200000000014,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "Merchant's Deck | no greed | shiny": {
+  "score": 676.0999999999999,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Merchant's Deck | unconstrained | evo": {
+  "score": 1630.1100000000001,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "Merchant's Deck | unconstrained | shiny": {
+  "score": 2146.7,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "Starter Deck | min 14 reg | evo": {
+  "score": 156.0,
+  "cores": "color+foil"
+ },
+ "Starter Deck | min 14 reg | shiny": {
+  "score": 184.5,
+  "cores": "equilibrium+foil"
+ },
+ "Starter Deck | min 8 reg | evo": {
+  "score": 292.5,
+  "cores": "color+foil"
+ },
+ "Starter Deck | min 8 reg | shiny": {
+  "score": 333.0,
+  "cores": "equilibrium+foil"
+ },
+ "Starter Deck | no greed | evo": {
+  "score": 156.0,
+  "cores": "color+foil"
+ },
+ "Starter Deck | no greed | shiny": {
+  "score": 184.5,
+  "cores": "equilibrium+foil"
+ },
+ "Starter Deck | unconstrained | evo": {
+  "score": 503.75,
+  "cores": "color+foil"
+ },
+ "Starter Deck | unconstrained | shiny": {
+  "score": 657.0,
+  "cores": "equilibrium+foil"
+ },
+ "The Anvil Deck | min 14 reg | evo": {
+  "score": 2281.9500000000007,
+  "cores": "color+foil+pure"
+ },
+ "The Anvil Deck | min 14 reg | shiny": {
+  "score": 3717.899999999999,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Anvil Deck | min 8 reg | evo": {
+  "score": 3146.82,
+  "cores": "color+foil+pure"
+ },
+ "The Anvil Deck | min 8 reg | shiny": {
+  "score": 4612.160000000001,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Anvil Deck | no greed | evo": {
+  "score": 875.14,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Anvil Deck | no greed | shiny": {
+  "score": 1352.7000000000003,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Anvil Deck | unconstrained | evo": {
+  "score": 3298.84,
+  "cores": "color+deluxe_core+foil+pure"
+ },
+ "The Anvil Deck | unconstrained | shiny": {
+  "score": 4612.160000000001,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Arcane Deck | min 14 reg | evo": {
+  "score": 96.47736422399997,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Arcane Deck | min 14 reg | shiny": {
+  "score": 106.25758387199998,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Arcane Deck | min 8 reg | evo": {
+  "score": 96.47736422399997,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Arcane Deck | min 8 reg | shiny": {
+  "score": 106.25758387199998,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Arcane Deck | no greed | evo": {
+  "score": 96.47736422399997,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Arcane Deck | no greed | shiny": {
+  "score": 106.25758387199998,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Arcane Deck | unconstrained | evo": {
+  "score": 96.47736422399997,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Arcane Deck | unconstrained | shiny": {
+  "score": 106.25758387199998,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Belt Deck | min 14 reg | evo": {
+  "score": 1847.5800000000002,
+  "cores": "color+foil+pure"
+ },
+ "The Belt Deck | min 14 reg | shiny": {
+  "score": 2839.2000000000007,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Belt Deck | min 8 reg | evo": {
+  "score": 2728.74,
+  "cores": "color+foil+pure"
+ },
+ "The Belt Deck | min 8 reg | shiny": {
+  "score": 3849.3,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Belt Deck | no greed | evo": {
+  "score": 787.0000000000002,
+  "cores": "color+deluxe_core+foil+void_core"
+ },
+ "The Belt Deck | no greed | shiny": {
+  "score": 1192.1000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Belt Deck | unconstrained | evo": {
+  "score": 2758.0800000000004,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Belt Deck | unconstrained | shiny": {
+  "score": 3849.3,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Bishop Deck | min 14 reg | evo": {
+  "score": 1134.7200000000005,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Bishop Deck | min 14 reg | shiny": {
+  "score": 1746.6000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Bishop Deck | min 8 reg | evo": {
+  "score": 1134.7200000000005,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Bishop Deck | min 8 reg | shiny": {
+  "score": 1746.6000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Bishop Deck | no greed | evo": {
+  "score": 1134.7200000000005,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Bishop Deck | no greed | shiny": {
+  "score": 1746.6000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Bishop Deck | unconstrained | evo": {
+  "score": 1134.7200000000005,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Bishop Deck | unconstrained | shiny": {
+  "score": 1746.6000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Black Deck | min 14 reg | evo": {
+  "score": 1559.760000000001,
+  "cores": "color+foil+pure"
+ },
+ "The Black Deck | min 14 reg | shiny": {
+  "score": 2394.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Black Deck | min 8 reg | evo": {
+  "score": 2459.5999999999995,
+  "cores": "color+foil+pure"
+ },
+ "The Black Deck | min 8 reg | shiny": {
+  "score": 3426.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Black Deck | no greed | evo": {
+  "score": 647.35,
+  "cores": "color+foil+void_core"
+ },
+ "The Black Deck | no greed | shiny": {
+  "score": 972.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Black Deck | unconstrained | evo": {
+  "score": 2637.36,
+  "cores": "color+foil+pure"
+ },
+ "The Black Deck | unconstrained | shiny": {
+  "score": 3510.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Cactus Deck | min 14 reg | evo": {
+  "score": 2638.05,
+  "cores": "color+foil+pure"
+ },
+ "The Cactus Deck | min 14 reg | shiny": {
+  "score": 3811.199999999999,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Cactus Deck | min 8 reg | evo": {
+  "score": 3408.0,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Cactus Deck | min 8 reg | shiny": {
+  "score": 4656.08,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Cactus Deck | no greed | evo": {
+  "score": 910.5999999999998,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Cactus Deck | no greed | shiny": {
+  "score": 1344.0,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Cactus Deck | unconstrained | evo": {
+  "score": 3449.87,
+  "cores": "color+deluxe_core+foil+pure"
+ },
+ "The Cactus Deck | unconstrained | shiny": {
+  "score": 4656.08,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Cake Deck | min 14 reg | evo": {
+  "score": 2523.452,
+  "cores": "archive_core+color+pure"
+ },
+ "The Cake Deck | min 14 reg | shiny": {
+  "score": 3185.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Cake Deck | min 8 reg | evo": {
+  "score": 3515.4,
+  "cores": "color+foil+pure"
+ },
+ "The Cake Deck | min 8 reg | shiny": {
+  "score": 4328.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Cake Deck | no greed | evo": {
+  "score": 1126.832,
+  "cores": "archive_core+color+pure"
+ },
+ "The Cake Deck | no greed | shiny": {
+  "score": 1440.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Cake Deck | unconstrained | evo": {
+  "score": 3863.6500000000005,
+  "cores": "color+foil+pure"
+ },
+ "The Cake Deck | unconstrained | shiny": {
+  "score": 4675.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Champion Deck | min 14 reg | evo": {
+  "score": 1934.7500000000002,
+  "cores": "color+foil+pure"
+ },
+ "The Champion Deck | min 14 reg | shiny": {
+  "score": 3053.0,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Champion Deck | min 8 reg | evo": {
+  "score": 2676.7200000000003,
+  "cores": "color+foil+pure"
+ },
+ "The Champion Deck | min 8 reg | shiny": {
+  "score": 3930.7200000000007,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Champion Deck | no greed | evo": {
+  "score": 733.6700000000002,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Champion Deck | no greed | shiny": {
+  "score": 1118.0,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Champion Deck | unconstrained | evo": {
+  "score": 2697.02,
+  "cores": "color+deluxe_core+foil+pure"
+ },
+ "The Champion Deck | unconstrained | shiny": {
+  "score": 3930.7200000000007,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Crate Deck | min 14 reg | evo": {
+  "score": 2814.2400000000007,
+  "cores": "color+foil+pure"
+ },
+ "The Crate Deck | min 14 reg | shiny": {
+  "score": 3744.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Crate Deck | min 8 reg | evo": {
+  "score": 3549.6000000000004,
+  "cores": "color+foil+pure"
+ },
+ "The Crate Deck | min 8 reg | shiny": {
+  "score": 4350.320000000001,
+  "cores": "equilibrium+foil+pure"
+ },
+ "The Crate Deck | no greed | evo": {
+  "score": 1047.6800000000005,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Crate Deck | no greed | shiny": {
+  "score": 1260.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Crate Deck | unconstrained | evo": {
+  "score": 3549.6000000000004,
+  "cores": "color+foil+pure"
+ },
+ "The Crate Deck | unconstrained | shiny": {
+  "score": 4350.320000000001,
+  "cores": "equilibrium+foil+pure"
+ },
+ "The Fairy Deck | min 14 reg | evo": {
+  "score": 1491.6679679999997,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fairy Deck | min 14 reg | shiny": {
+  "score": 1871.1352447999996,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fairy Deck | min 8 reg | evo": {
+  "score": 2392.3714944,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fairy Deck | min 8 reg | shiny": {
+  "score": 2888.4514944,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fairy Deck | no greed | evo": {
+  "score": 702.7876223999999,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fairy Deck | no greed | shiny": {
+  "score": 890.1517183999998,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fairy Deck | unconstrained | evo": {
+  "score": 2481.4114944,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fairy Deck | unconstrained | shiny": {
+  "score": 2888.4514944,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fives Deck | min 14 reg | evo": {
+  "score": 1389.5439362047996,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fives Deck | min 14 reg | shiny": {
+  "score": 1701.1439362047995,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fives Deck | min 8 reg | evo": {
+  "score": 1389.5439362047996,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fives Deck | min 8 reg | shiny": {
+  "score": 1701.1439362047995,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fives Deck | no greed | evo": {
+  "score": 1389.5439362047996,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fives Deck | no greed | shiny": {
+  "score": 1701.1439362047995,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Fives Deck | unconstrained | evo": {
+  "score": 1389.5439362047996,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Fives Deck | unconstrained | shiny": {
+  "score": 1701.1439362047995,
+  "cores": "archive_core+equilibrium+foil+sparkling"
+ },
+ "The Gilded Deck | min 14 reg | evo": {
+  "score": 2117.0687999999996,
+  "cores": "archive_core+foil+pure"
+ },
+ "The Gilded Deck | min 14 reg | shiny": {
+  "score": 2541.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Gilded Deck | min 8 reg | evo": {
+  "score": 3166.8000000000006,
+  "cores": "archive_core+foil+pure"
+ },
+ "The Gilded Deck | min 8 reg | shiny": {
+  "score": 3553.5,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Gilded Deck | no greed | evo": {
+  "score": 873.5400000000002,
+  "cores": "archive_core+color+foil"
+ },
+ "The Gilded Deck | no greed | shiny": {
+  "score": 990.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Gilded Deck | unconstrained | evo": {
+  "score": 3508.6912,
+  "cores": "archive_core+foil+pure"
+ },
+ "The Gilded Deck | unconstrained | shiny": {
+  "score": 3802.5,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Living Deck | min 14 reg | evo": {
+  "score": 2027.97,
+  "cores": "color+foil+pure"
+ },
+ "The Living Deck | min 14 reg | shiny": {
+  "score": 2648.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Living Deck | min 8 reg | evo": {
+  "score": 2805.81,
+  "cores": "color+foil+pure"
+ },
+ "The Living Deck | min 8 reg | shiny": {
+  "score": 3448.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Living Deck | no greed | evo": {
+  "score": 751.0799999999998,
+  "cores": "archive_core+color+foil"
+ },
+ "The Living Deck | no greed | shiny": {
+  "score": 1012.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Living Deck | unconstrained | evo": {
+  "score": 2823.9800000000005,
+  "cores": "color+foil+pure"
+ },
+ "The Living Deck | unconstrained | shiny": {
+  "score": 3448.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Mutant Deck | min 14 reg | evo": {
+  "score": 1361.2979999999998,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Mutant Deck | min 14 reg | shiny": {
+  "score": 2898.7,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Mutant Deck | min 8 reg | evo": {
+  "score": 2039.2000000000003,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Mutant Deck | min 8 reg | shiny": {
+  "score": 4017.6400000000003,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Mutant Deck | no greed | evo": {
+  "score": 558.812,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "The Mutant Deck | no greed | shiny": {
+  "score": 1219.0,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Mutant Deck | unconstrained | evo": {
+  "score": 2067.2000000000003,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Mutant Deck | unconstrained | shiny": {
+  "score": 4206.6900000000005,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Mystery Deck | min 14 reg | evo": {
+  "score": 1547.0000000000005,
+  "cores": "color+pure"
+ },
+ "The Mystery Deck | min 14 reg | shiny": {
+  "score": 1917.0,
+  "cores": "equilibrium+foil"
+ },
+ "The Mystery Deck | min 8 reg | evo": {
+  "score": 1969.1200000000003,
+  "cores": "foil+pure"
+ },
+ "The Mystery Deck | min 8 reg | shiny": {
+  "score": 2241.0,
+  "cores": "equilibrium+foil"
+ },
+ "The Mystery Deck | no greed | evo": {
+  "score": 604.2400000000001,
+  "cores": "color+pure"
+ },
+ "The Mystery Deck | no greed | shiny": {
+  "score": 693.0,
+  "cores": "equilibrium+foil"
+ },
+ "The Mystery Deck | unconstrained | evo": {
+  "score": 2005.6800000000003,
+  "cores": "foil+pure"
+ },
+ "The Mystery Deck | unconstrained | shiny": {
+  "score": 2241.0,
+  "cores": "equilibrium+foil"
+ },
+ "The Ornate Deck | min 14 reg | evo": {
+  "score": 1881.7,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Ornate Deck | min 14 reg | shiny": {
+  "score": 2697.5,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Ornate Deck | min 8 reg | evo": {
+  "score": 2678.11,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Ornate Deck | min 8 reg | shiny": {
+  "score": 3633.8499999999995,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Ornate Deck | no greed | evo": {
+  "score": 743.6800000000002,
+  "cores": "archive_core+color+foil+void_core"
+ },
+ "The Ornate Deck | no greed | shiny": {
+  "score": 1078.0500000000002,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Ornate Deck | unconstrained | evo": {
+  "score": 2707.4300000000003,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Ornate Deck | unconstrained | shiny": {
+  "score": 3633.8499999999995,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Pillager Deck | min 14 reg | evo": {
+  "score": 2607.0,
+  "cores": "color+foil+pure"
+ },
+ "The Pillager Deck | min 14 reg | shiny": {
+  "score": 3852.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Pillager Deck | min 8 reg | evo": {
+  "score": 3583.4000000000005,
+  "cores": "color+foil+pure"
+ },
+ "The Pillager Deck | min 8 reg | shiny": {
+  "score": 4740.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Pillager Deck | no greed | evo": {
+  "score": 990.46,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Pillager Deck | no greed | shiny": {
+  "score": 1308.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Pillager Deck | unconstrained | evo": {
+  "score": 3673.16,
+  "cores": "color+foil+pure"
+ },
+ "The Pillager Deck | unconstrained | shiny": {
+  "score": 4740.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Puzzle Deck | min 14 reg | evo": {
+  "score": 2614.2199999999993,
+  "cores": "color+foil+pure"
+ },
+ "The Puzzle Deck | min 14 reg | shiny": {
+  "score": 3302.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Puzzle Deck | min 8 reg | evo": {
+  "score": 3110.64,
+  "cores": "color+foil+pure"
+ },
+ "The Puzzle Deck | min 8 reg | shiny": {
+  "score": 3737.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Puzzle Deck | no greed | evo": {
+  "score": 837.4,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Puzzle Deck | no greed | shiny": {
+  "score": 1048.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Puzzle Deck | unconstrained | evo": {
+  "score": 3080.4000000000005,
+  "cores": "deluxe_core+foil+pure"
+ },
+ "The Puzzle Deck | unconstrained | shiny": {
+  "score": 3723.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Queen Deck | min 14 reg | evo": {
+  "score": 2727.06,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Queen Deck | min 14 reg | shiny": {
+  "score": 4416.2,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Queen Deck | min 8 reg | evo": {
+  "score": 3589.1100000000006,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Queen Deck | min 8 reg | shiny": {
+  "score": 4592.7,
+  "cores": "equilibrium+foil+sparkling+void_core"
+ },
+ "The Queen Deck | no greed | evo": {
+  "score": 964.6400000000001,
+  "cores": "color+deluxe_core+pure+void_core"
+ },
+ "The Queen Deck | no greed | shiny": {
+  "score": 1377.4,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Queen Deck | unconstrained | evo": {
+  "score": 3969.2700000000004,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Queen Deck | unconstrained | shiny": {
+  "score": 4941.0,
+  "cores": "equilibrium+foil+sparkling+void_core"
+ },
+ "The Relic Deck | min 14 reg | evo": {
+  "score": 1623.4500000000005,
+  "cores": "color+foil+pure"
+ },
+ "The Relic Deck | min 14 reg | shiny": {
+  "score": 2790.2999999999997,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Relic Deck | min 8 reg | evo": {
+  "score": 2262.4700000000007,
+  "cores": "color+deluxe_core+foil+pure"
+ },
+ "The Relic Deck | min 8 reg | shiny": {
+  "score": 3460.32,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Relic Deck | no greed | evo": {
+  "score": 608.3000000000003,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Relic Deck | no greed | shiny": {
+  "score": 994.0000000000002,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Relic Deck | unconstrained | evo": {
+  "score": 2479.4800000000005,
+  "cores": "color+deluxe_core+foil+pure"
+ },
+ "The Relic Deck | unconstrained | shiny": {
+  "score": 3451.2000000000007,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Rook Deck | min 14 reg | evo": {
+  "score": 3625.7760000000003,
+  "cores": "archive_core+color+pure"
+ },
+ "The Rook Deck | min 14 reg | shiny": {
+  "score": 4752.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Rook Deck | min 8 reg | evo": {
+  "score": 4352.4,
+  "cores": "color+foil+pure"
+ },
+ "The Rook Deck | min 8 reg | shiny": {
+  "score": 5616.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Rook Deck | no greed | evo": {
+  "score": 1483.2719999999995,
+  "cores": "archive_core+color+pure"
+ },
+ "The Rook Deck | no greed | shiny": {
+  "score": 1944.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Rook Deck | unconstrained | evo": {
+  "score": 4352.4,
+  "cores": "color+foil+pure"
+ },
+ "The Rook Deck | unconstrained | shiny": {
+  "score": 5616.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Runic Deck | min 14 reg | evo": {
+  "score": 2117.2000000000003,
+  "cores": "color+foil+pure"
+ },
+ "The Runic Deck | min 14 reg | shiny": {
+  "score": 3216.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Runic Deck | min 8 reg | evo": {
+  "score": 3024.04,
+  "cores": "color+foil+pure"
+ },
+ "The Runic Deck | min 8 reg | shiny": {
+  "score": 4152.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Runic Deck | no greed | evo": {
+  "score": 913.3200000000004,
+  "cores": "archive_core+color+pure"
+ },
+ "The Runic Deck | no greed | shiny": {
+  "score": 1392.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Runic Deck | unconstrained | evo": {
+  "score": 3217.8,
+  "cores": "color+foil+pure"
+ },
+ "The Runic Deck | unconstrained | shiny": {
+  "score": 4152.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Shadow Deck | min 14 reg | evo": {
+  "score": 1559.760000000001,
+  "cores": "color+foil+pure"
+ },
+ "The Shadow Deck | min 14 reg | shiny": {
+  "score": 2400.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Shadow Deck | min 8 reg | evo": {
+  "score": 2459.5999999999995,
+  "cores": "color+foil+pure"
+ },
+ "The Shadow Deck | min 8 reg | shiny": {
+  "score": 3426.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Shadow Deck | no greed | evo": {
+  "score": 774.3999999999999,
+  "cores": "color+foil+void_core"
+ },
+ "The Shadow Deck | no greed | shiny": {
+  "score": 972.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Shadow Deck | unconstrained | evo": {
+  "score": 2859.4799999999996,
+  "cores": "foil+pure+void_core"
+ },
+ "The Shadow Deck | unconstrained | shiny": {
+  "score": 3515.3999999999996,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Skull Deck | min 14 reg | evo": {
+  "score": 2042.25,
+  "cores": "color+foil+pure"
+ },
+ "The Skull Deck | min 14 reg | shiny": {
+  "score": 3093.0,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Skull Deck | min 8 reg | evo": {
+  "score": 2437.46,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Skull Deck | min 8 reg | shiny": {
+  "score": 3541.4,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Skull Deck | no greed | evo": {
+  "score": 883.5899999999999,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Skull Deck | no greed | shiny": {
+  "score": 1263.1000000000004,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Skull Deck | unconstrained | evo": {
+  "score": 2504.59,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Skull Deck | unconstrained | shiny": {
+  "score": 3541.4,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Snake Deck | min 14 reg | evo": {
+  "score": 3666.600000000001,
+  "cores": "color+foil+pure"
+ },
+ "The Snake Deck | min 14 reg | shiny": {
+  "score": 4394.600000000001,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Snake Deck | min 8 reg | evo": {
+  "score": 4553.46,
+  "cores": "color+foil+pure"
+ },
+ "The Snake Deck | min 8 reg | shiny": {
+  "score": 5051.600000000001,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Snake Deck | no greed | evo": {
+  "score": 1394.8200000000004,
+  "cores": "archive_core+color+pure"
+ },
+ "The Snake Deck | no greed | shiny": {
+  "score": 1618.1999999999994,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Snake Deck | unconstrained | evo": {
+  "score": 4553.460000000001,
+  "cores": "color+foil+pure"
+ },
+ "The Snake Deck | unconstrained | shiny": {
+  "score": 5051.600000000001,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Tenos Deck | min 14 reg | evo": {
+  "score": 1737.84,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Tenos Deck | min 14 reg | shiny": {
+  "score": 2562.2,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Tenos Deck | min 8 reg | evo": {
+  "score": 2515.8,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Tenos Deck | min 8 reg | shiny": {
+  "score": 3490.2999999999993,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Tenos Deck | no greed | evo": {
+  "score": 703.9000000000001,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "The Tenos Deck | no greed | shiny": {
+  "score": 1032.9,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Tenos Deck | unconstrained | evo": {
+  "score": 2660.42,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Tenos Deck | unconstrained | shiny": {
+  "score": 3662.9600000000005,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Treasure Deck | min 14 reg | evo": {
+  "score": 1778.8800000000006,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Treasure Deck | min 14 reg | shiny": {
+  "score": 3406.8,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Treasure Deck | min 8 reg | evo": {
+  "score": 2342.2,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Treasure Deck | min 8 reg | shiny": {
+  "score": 4204.2,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Treasure Deck | no greed | evo": {
+  "score": 672.5999999999999,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "The Treasure Deck | no greed | shiny": {
+  "score": 1185.7000000000003,
+  "cores": "equilibrium+foil+sparkling+steadfast"
+ },
+ "The Treasure Deck | unconstrained | evo": {
+  "score": 2459.1600000000003,
+  "cores": "color+foil+pure+void_core"
+ },
+ "The Treasure Deck | unconstrained | shiny": {
+  "score": 4204.2,
+  "cores": "equilibrium+foil+pure+sparkling"
+ },
+ "The Velara Deck | min 14 reg | evo": {
+  "score": 2967.3600000000006,
+  "cores": "color+foil+pure"
+ },
+ "The Velara Deck | min 14 reg | shiny": {
+  "score": 3828.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Velara Deck | min 8 reg | evo": {
+  "score": 3470.4799999999996,
+  "cores": "color+foil+pure"
+ },
+ "The Velara Deck | min 8 reg | shiny": {
+  "score": 4139.75,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Velara Deck | no greed | evo": {
+  "score": 1003.7000000000006,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Velara Deck | no greed | shiny": {
+  "score": 1210.5,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Velara Deck | unconstrained | evo": {
+  "score": 3530.54,
+  "cores": "foil+pure+void_core"
+ },
+ "The Velara Deck | unconstrained | shiny": {
+  "score": 4139.75,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Villager Deck | min 14 reg | evo": {
+  "score": 1423.0799999999997,
+  "cores": "color+foil+pure"
+ },
+ "The Villager Deck | min 14 reg | shiny": {
+  "score": 2076.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Villager Deck | min 8 reg | evo": {
+  "score": 2015.7600000000002,
+  "cores": "color+foil+pure"
+ },
+ "The Villager Deck | min 8 reg | shiny": {
+  "score": 2706.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Villager Deck | no greed | evo": {
+  "score": 535.4,
+  "cores": "color+deluxe_core+pure"
+ },
+ "The Villager Deck | no greed | shiny": {
+  "score": 762.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Villager Deck | unconstrained | evo": {
+  "score": 2065.58,
+  "cores": "color+foil+pure"
+ },
+ "The Villager Deck | unconstrained | shiny": {
+  "score": 2706.0,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Wendarr Deck | min 14 reg | evo": {
+  "score": 1669.2000000000003,
+  "cores": "color+foil+pure"
+ },
+ "The Wendarr Deck | min 14 reg | shiny": {
+  "score": 2283.75,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Wendarr Deck | min 8 reg | evo": {
+  "score": 2410.98,
+  "cores": "color+foil+pure"
+ },
+ "The Wendarr Deck | min 8 reg | shiny": {
+  "score": 3081.25,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Wendarr Deck | no greed | evo": {
+  "score": 716.8000000000003,
+  "cores": "archive_core+color+pure"
+ },
+ "The Wendarr Deck | no greed | shiny": {
+  "score": 947.25,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Wendarr Deck | unconstrained | evo": {
+  "score": 2626.56,
+  "cores": "color+foil+pure"
+ },
+ "The Wendarr Deck | unconstrained | shiny": {
+  "score": 3291.5,
+  "cores": "equilibrium+foil+sparkling"
+ },
+ "The Wold Deck | min 14 reg | evo": {
+  "score": 1940.5359999999998,
+  "cores": "archive_core+color+foil+pure"
+ },
+ "The Wold Deck | min 14 reg | shiny": {
+  "score": 3179.9700000000003,
+  "cores": "equilibrium+foil+pure+sparkling+steadfast"
+ },
+ "The Wold Deck | min 8 reg | evo": {
+  "score": 2584.6200000000003,
+  "cores": "archive_core+color+foil+pure+void_core"
+ },
+ "The Wold Deck | min 8 reg | shiny": {
+  "score": 3995.82,
+  "cores": "equilibrium+foil+pure+sparkling+steadfast"
+ },
+ "The Wold Deck | no greed | evo": {
+  "score": 708.464,
+  "cores": "archive_core+color+deluxe_core+pure"
+ },
+ "The Wold Deck | no greed | shiny": {
+  "score": 1130.4,
+  "cores": "color+equilibrium+foil+sparkling+steadfast"
+ },
+ "The Wold Deck | unconstrained | evo": {
+  "score": 2645.7980000000002,
+  "cores": "archive_core+color+foil+pure+void_core"
+ },
+ "The Wold Deck | unconstrained | shiny": {
+  "score": 3995.82,
+  "cores": "equilibrium+foil+pure+sparkling+steadfast"
+ }
+}

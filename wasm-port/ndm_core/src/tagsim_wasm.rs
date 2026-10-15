@@ -15,7 +15,7 @@ use crate::tagsim::{
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
     CoreSpecIn, Implicit, SlotCard, TagAxis, TagRule, TagRun, TagSimConfig,
-    SCHEDULE_LEGACY,
+    SCHEDULE_LEGACY, SearchOpts,
     COLOR_NONE,
 };
 
@@ -229,6 +229,7 @@ pub(crate) fn build_run(inp: &TagRunInput) -> TagRun<'_> {
         restarts: inp.restarts,
         seed: inp.seed,
         sched: SCHEDULE_LEGACY,
+        opts: SearchOpts::default(),
         cfg: TagSimConfig {
             mult_dir_vert: inp.mult_dir_vert,
             mult_dir_horiz: inp.mult_dir_horiz,

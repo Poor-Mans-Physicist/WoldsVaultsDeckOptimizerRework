@@ -166,8 +166,21 @@ testing:
     - { label: "min 14 reg",    min_regular: 14, max_greed: -1 }
     - { label: "min 8 reg",     min_regular:  8, max_greed: -1 }
     - { label: "unconstrained", min_regular: -1, max_greed: -1 }
+  # Per surviving core set: `restarts` anneals of `n_iter` steps, then the
+  # `phase2.top_k` best are re-annealed `phase2.n_iter` steps on a cooler
+  # schedule.
   n_iter:   60000
   restarts: 12
+  phase2:
+    top_k:  4
+    n_iter: 180000
+    schedule: { kind: target, params: [0.1, 0.001, 0.005, 0.01] }
+  # Successive halving across core sets: screen every set on a small budget,
+  # give the full budget only to sets within `margin` of the cell's leader
+  # (at least `keep_min`). Versus no halving at 30k/90k: mean cell gap
+  # 0.148% vs 0.245%, 26 s vs 44 s for the full panel
+  # (scripts/bench_panel.py, 2026-10-15).
+  halving: { enabled: true, restarts: 4, n_iter: 30000, margin: 0.05, keep_min: 3 }
   # SA temperature schedule (tagged engine).
   #   geometric: [t0, t1]                — absolute T in NDM units
   #   target:    [a0, a1, t_init, eta]   — adaptive: accepted share of worse
@@ -175,6 +188,8 @@ testing:
   #   Target [0.5, 0.001, 0.02, 0.01] at 60k matches geometric 100 → 0.5 at
   #   120k (scripts/bench_search.py, 2026-10-15).
   schedule: { kind: target, params: [0.5, 0.001, 0.02, 0.01] }
+  # Extra search options (tagged engine): legal_only, polish.
+  search_opts: []
 
 # Mode-specific overrides. Selected via the --mode CLI flag.
 modes:

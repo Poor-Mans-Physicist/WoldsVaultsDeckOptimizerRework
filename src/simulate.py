@@ -611,6 +611,11 @@ def _live_sa_schedule() -> Tuple[str, List[float]]:
     return _cfg.SA_SCHEDULE
 
 
+def _live_search_opts() -> List[str]:
+    from . import config as _cfg
+    return _cfg.SA_SEARCH_OPTS
+
+
 def sa_optimize_tagged(
     deck:       Deck,
     card_class: CardClass,
@@ -620,6 +625,9 @@ def sa_optimize_tagged(
     seed:       Optional[int] = None,
     final_pass: Optional[bool] = None,
     schedule:   Optional[Tuple[str, List[float]]] = None,
+    search_opts: Optional[List[str]] = None,
+    restarts:   int = 1,
+    phase2:     Optional[tuple] = None,
     defer:      bool = False,
 ) -> Tuple[Dict[Position, CardType], float]:
     """One SA restart through the 2.0 tag-aware kernel in Max configuration.
@@ -673,7 +681,7 @@ def sa_optimize_tagged(
         final_pass_nonfoil_evo = (MODE != "vanilla") if final_pass is None else final_pass,
         exact_groups        = False,
         n_iter              = n_iter,
-        restarts            = 1,
+        restarts            = restarts,
         mult_dir_vert          = MULT_DIR_GREED_VERT,
         mult_dir_horiz         = MULT_DIR_GREED_HORIZ,
         mult_pure_base         = MULT_PURE_BASE,
@@ -700,6 +708,8 @@ def sa_optimize_tagged(
         seed                   = seed,
         legal_combos           = LEGAL_COMBOS if assignable else None,
         schedule               = schedule or _live_sa_schedule(),
+        search_opts            = _live_search_opts() if search_opts is None else search_opts,
+        phase2                 = phase2,
         defer                  = defer,
     )
     if defer:
