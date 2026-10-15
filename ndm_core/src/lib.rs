@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use rand::prelude::*;
 use rand::rngs::SmallRng;
+use rayon::prelude::*;
 use std::collections::HashMap;
 
 mod inventory;
@@ -501,9 +502,13 @@ fn sa_optimize_inner(
     n_iter: usize,
     t_start: f64,
     t_end: f64,
+    seed: Option<u64>,
 ) -> (Vec<u8>, f64) {
     let n = deck.n;
-    let mut rng = SmallRng::from_entropy();
+    let mut rng = match seed {
+        Some(s) => SmallRng::seed_from_u64(s),
+        None => SmallRng::from_entropy(),
+    };
 
     // Default starting card type
     let default_t: u8 = if cfg.is_shiny && !cfg.shiny_positional {
@@ -701,9 +706,31 @@ fn sa_optimize_inner(
 // Returns (assignment_as_strings, score).
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// A prepared classic SA restart (`run_sa_optimize(..., defer=True)`),
+/// executed later by `run_sa_jobs`.
+#[pyclass(frozen)]
+pub struct ClassicJob {
+    deck: DeckData,
+    cores: Vec<u8>,
+    placeable: Vec<u8>,
+    cfg: SimConfig,
+    n_iter: usize,
+    t_start: f64,
+    t_end: f64,
+    seed: Option<u64>,
+}
+
+impl ClassicJob {
+    fn run(&self) -> (Vec<u8>, f64) {
+        sa_optimize_inner(&self.deck, &self.cores, &self.placeable, &self.cfg,
+                          self.n_iter, self.t_start, self.t_end, self.seed)
+    }
+}
+
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 fn run_sa_optimize(
+    py: Python<'_>,
     // Deck geometry
     slots:               Vec<(i32, i32)>,
     row_peers:           Vec<Vec<usize>>,
@@ -749,11 +776,11 @@ fn run_sa_optimize(
     experimental_exponent: f64,
     experimental_boost: f64,
     deluxe_counted_as_regular: bool,
-) -> PyResult<(Vec<String>, f64)> {
+    // true → return a ClassicJob for run_sa_jobs instead of running now
+    defer: Option<bool>,
+    seed: Option<u64>,
+) -> PyResult<PyObject> {
     let n = slots.len();
-    if n == 0 {
-        return Ok((Vec::new(), 0.0));
-    }
 
     // Build slot index map for directional lookups
     let slot_map: HashMap<(i32, i32), usize> = slots
@@ -865,13 +892,49 @@ fn run_sa_optimize(
         auto_place_arcane,
     };
 
-    let (best_asgn, best_score) =
-        sa_optimize_inner(&deck, &cores_u8, &placeable_u8, &cfg, n_iter, t_start, t_end);
+    let job = ClassicJob {
+        deck, cores: cores_u8, placeable: placeable_u8, cfg, n_iter, t_start, t_end, seed,
+    };
+    if defer.unwrap_or(false) {
+        return Ok(Py::new(py, job)?.into_py(py));
+    }
+    Ok(classic_result(py, if n == 0 { (Vec::new(), 0.0) } else { job.run() }))
+}
 
-    // Convert u8 assignment back to strings for Python
-    let asgn_strs: Vec<String> = best_asgn.iter().map(|&t| card_type_to_str(t).to_owned()).collect();
+fn classic_result(py: Python<'_>, (asgn, score): (Vec<u8>, f64)) -> PyObject {
+    let asgn_strs: Vec<String> = asgn.iter().map(|&t| card_type_to_str(t).to_owned()).collect();
+    (asgn_strs, score).into_py(py)
+}
 
-    Ok((asgn_strs, best_score))
+/// Run prepared SA jobs (ClassicJob / TaggedJob from `defer=True` calls) on
+/// the rayon pool with the GIL released. Results come back in job order, in
+/// the same shape the matching non-deferred call returns.
+#[pyfunction]
+fn run_sa_jobs(py: Python<'_>, jobs: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<PyObject>> {
+    enum Job { Classic(Py<ClassicJob>), Tagged(Py<tagsim_py::TaggedJob>) }
+    enum Out { Classic(Vec<u8>, f64), Tagged(Vec<tagsim::SlotCard>, f64) }
+    let js: Vec<Job> = jobs.iter().map(|o| {
+        if let Ok(c) = o.downcast::<ClassicJob>() {
+            Ok(Job::Classic(c.clone().unbind()))
+        } else if let Ok(t) = o.downcast::<tagsim_py::TaggedJob>() {
+            Ok(Job::Tagged(t.clone().unbind()))
+        } else {
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "run_sa_jobs: expected jobs from run_sa_optimize/run_sa_tagged(defer=True)"))
+        }
+    }).collect::<PyResult<_>>()?;
+    let outs: Vec<Out> = py.allow_threads(|| js.par_iter().map(|j| match j {
+        Job::Classic(c) => {
+            let c = c.get();
+            if c.deck.n == 0 { Out::Classic(Vec::new(), 0.0) }
+            else { let (a, s) = c.run(); Out::Classic(a, s) }
+        }
+        Job::Tagged(t) => { let (a, s) = t.get().run(); Out::Tagged(a, s) }
+    }).collect());
+    Ok(outs.into_iter().map(|o| match o {
+        Out::Classic(a, s) => classic_result(py, (a, s)),
+        Out::Tagged(a, s) => tagsim_py::tagged_result(py, &a, s),
+    }).collect())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -884,6 +947,7 @@ fn ndm_core(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(inventory::run_sa_inventory, m)?)?;
     m.add_function(wrap_pyfunction!(tagsim_py::run_sa_tagged, m)?)?;
     m.add_function(wrap_pyfunction!(tagsim_py::score_tagged, m)?)?;
+    m.add_function(wrap_pyfunction!(run_sa_jobs, m)?)?;
     Ok(())
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -955,6 +1019,7 @@ mod sa_bench {
             n_iter: N_ITER,
             restarts: 1,
             seed: Some(42),
+            sched: SCHEDULE_LEGACY,
             cfg: TagSimConfig {
                 mult_dir_vert: 4.0,
                 mult_dir_horiz: 4.0,

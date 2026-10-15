@@ -172,6 +172,14 @@ SPREADSHEET_PREFIX: str  = _CFG["output"]["spreadsheet_prefix"]
 # instead of the deck's own min_regular / max_greed settings.
 FULL_TEST_PANEL: bool = _CFG["testing"]["full_panel"]
 
+
+def _sa_schedule(cfg: dict) -> Tuple[str, List[float]]:
+    s = cfg["testing"].get("schedule") or {"kind": "geometric", "params": [100.0, 0.5]}
+    return str(s["kind"]), [float(v) for v in s["params"]]
+
+
+SA_SCHEDULE: Tuple[str, List[float]] = _sa_schedule(_CFG)
+
 if ALLOW_DELUXE:
     PLACEABLE.append(CardType.DELUXE)
 
@@ -603,6 +611,7 @@ def set_mode(name: str) -> None:
     global DELUXE_COUNTED_AS_REGULAR
     global BALANCE_DISPLAY, HEATMAP_DISPLAY, HNS_Q, SPREAD_METRIC
     global EXPORT_SPREADSHEET, SPREADSHEET_PREFIX, FULL_TEST_PANEL
+    global SA_SCHEDULE
     global DECKS
 
     # Re-read + re-merge
@@ -653,6 +662,7 @@ def set_mode(name: str) -> None:
     EXPORT_SPREADSHEET       = _CFG["output"]["export_spreadsheet"]
     SPREADSHEET_PREFIX       = _CFG["output"]["spreadsheet_prefix"]
     FULL_TEST_PANEL          = _CFG["testing"]["full_panel"]
+    SA_SCHEDULE              = _sa_schedule(_CFG)
 
     # PLACEABLE is module-level state in types.py and was mutated at import time
     # based on ALLOW_DELUXE. Re-sync it now so it matches the new mode.

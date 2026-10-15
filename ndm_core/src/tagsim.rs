@@ -256,6 +256,7 @@ pub struct CoreSpecIn {
     pub override_: f64,   // < 0 = none
 }
 
+#[derive(Clone, Copy)]
 pub struct TagSimConfig {
     pub mult_dir_vert: f64,
     pub mult_dir_horiz: f64,
@@ -325,7 +326,66 @@ pub struct TagRun<'a> {
     pub n_iter: usize,
     pub restarts: usize,
     pub seed: Option<u64>,
+    pub sched: SaSchedule,
     pub cfg: TagSimConfig,
+}
+
+/// SA temperature schedule.
+/// Geometric: absolute T from t0 to t1 (the 1.x/2.0 schedule, in NDM units).
+/// Target: T adapts so the share of accepted worse moves tracks a0 → a1
+/// (geometric in run progress); `t_init` is relative to the start score, so
+/// the schedule is independent of the deck's NDM scale.
+#[derive(Clone, Copy, Debug)]
+pub enum SaSchedule {
+    Geometric { t0: f64, t1: f64 },
+    Target { a0: f64, a1: f64, t_init: f64, eta: f64 },
+}
+
+pub const SCHEDULE_LEGACY: SaSchedule = SaSchedule::Geometric { t0: 100.0, t1: 0.5 };
+
+/// Per-restart temperature state. The geometric arm reproduces the original
+/// expression and RNG draw order exactly, so seeded runs are unchanged.
+struct Temper {
+    sched: SaSchedule,
+    t: f64,
+    log_ratio: f64,
+    target: f64,
+    n_iter: f64,
+}
+
+impl Temper {
+    fn new(sched: SaSchedule, n_iter: usize, score0: f64) -> Self {
+        let (t, log_ratio, target) = match sched {
+            SaSchedule::Geometric { t0, t1 } => (t0, (t1 / t0).ln(), 0.0),
+            SaSchedule::Target { a0, a1, t_init, eta: _ } =>
+                (t_init * score0.abs().max(1.0), (a1 / a0).ln(), a0),
+        };
+        Temper { sched, t, log_ratio, target, n_iter: n_iter as f64 }
+    }
+
+    #[inline(always)]
+    fn step(&mut self, it: usize) {
+        match self.sched {
+            SaSchedule::Geometric { t0, .. } => {
+                let raw = t0 * (self.log_ratio * it as f64 / self.n_iter).exp();
+                self.t = if raw < 1e-10 { 1e-10 } else { raw };
+            }
+            SaSchedule::Target { a0, .. } => {
+                self.target = a0 * (self.log_ratio * it as f64 / self.n_iter).exp();
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn accept(&mut self, delta: f64, rng: &mut SmallRng) -> bool {
+        if delta >= 0.0 { return true; }
+        let ok = rng.gen::<f64>() < (delta / self.t).exp();
+        if let SaSchedule::Target { eta, .. } = self.sched {
+            let hit = if ok { 1.0 } else { 0.0 };
+            self.t = (self.t * (eta * (self.target - hit)).exp()).clamp(1e-12, 1e12);
+        }
+        ok
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1947,8 +2007,6 @@ fn sa_one_restart(
     run: &TagRun<'_>,
     cores: &Cores,
     materialized: &[SlotCard],
-    t_start: f64,
-    t_end: f64,
     seed: u64,
 ) -> (Vec<SlotCard>, f64) {
     let mut rng = SmallRng::seed_from_u64(seed);
@@ -2014,15 +2072,12 @@ fn sa_one_restart(
         }
     }
 
-    let log_cool = (t_end / t_start).ln();
+    let mut temper = Temper::new(run.sched, run.n_iter, score);
     let mut tmp_old = Vec::new();
     let mut tmp_new = Vec::new();
 
     for it in 0..run.n_iter {
-        let temperature = {
-            let raw = t_start * (log_cool * it as f64 / run.n_iter as f64).exp();
-            if raw < 1e-10 { 1e-10 } else { raw }
-        };
+        temper.step(it);
         let roll: f64 = rng.gen();
 
         if roll < toggle_prob {
@@ -2057,7 +2112,7 @@ fn sa_one_restart(
                 None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
             };
             let delta = new_score - score;
-            if delta >= 0.0 || rng.gen::<f64>() < (delta / temperature).exp() {
+            if temper.accept(delta, &mut rng) {
                 rules.toggle_apply(bit, adding);
                 stat_placed = (stat_placed as i32 + stat_delta) as u32;
                 score = new_score;
@@ -2093,7 +2148,7 @@ fn sa_one_restart(
                     None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
                 };
                 let delta = new_score - score;
-                if delta >= 0.0 || rng.gen::<f64>() < (delta / temperature).exp() {
+                if temper.accept(delta, &mut rng) {
                     score = new_score;
                     if score > best_score { best_score = score; best_asgn = asgn.clone(); }
                     if let Some(d) = deval.as_mut() { d.commit(); }
@@ -2160,7 +2215,7 @@ fn sa_one_restart(
                 None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
             };
             let delta = new_score - score;
-            if delta >= 0.0 || rng.gen::<f64>() < (delta / temperature).exp() {
+            if temper.accept(delta, &mut rng) {
                 score = new_score;
                 if score > best_score { best_score = score; best_asgn = asgn.clone(); }
                 if let Some(d) = deval.as_mut() { d.commit(); }
@@ -2206,7 +2261,7 @@ fn sa_one_restart(
                 None => simulate(geom, &asgn, cores, &run.implicits, cfg, &mut s),
             };
             let delta = new_score - score;
-            if delta >= 0.0 || rng.gen::<f64>() < (delta / temperature).exp() {
+            if temper.accept(delta, &mut rng) {
                 score = new_score;
                 if score > best_score { best_score = score; best_asgn = asgn.clone(); }
                 if let Some(d) = deval.as_mut() { d.commit(); }
@@ -2280,7 +2335,7 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
                 seeder.gen::<u64>() ^ (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
             }
         };
-        let (asgn, score) = sa_one_restart(&geom, &run, &cores, &materialized, 100.0, 0.5, seed);
+        let (asgn, score) = sa_one_restart(&geom, &run, &cores, &materialized, seed);
         if best.as_ref().map_or(true, |b| score > b.1) {
             best = Some((asgn, score));
         }
@@ -2469,6 +2524,7 @@ mod delta_tests {
                 n_iter: 0,
                 restarts: 1,
                 seed: None,
+                sched: SCHEDULE_LEGACY,
                 cfg: cfg_v,
             };
             let geom = build_geom(&run);
@@ -2562,6 +2618,7 @@ mod delta_tests {
             n_iter: 2000,
             restarts: 1,
             seed: Some(42),
+            sched: SCHEDULE_LEGACY,
             cfg,
         };
         let (asgn, score) = run_sa_tagged(run);

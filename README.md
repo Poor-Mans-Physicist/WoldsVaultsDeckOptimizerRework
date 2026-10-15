@@ -46,14 +46,15 @@ Layout-grid legend: `R`/`C`/`S`/`X` = row/col/surround/diagonal scaling cards, `
 
 ### Tuning
 
-- `config.yaml` — search budget (`testing: n_iter / restarts`), spreadsheet export toggle, per-mode core values and gates, `engine: tagged` (default; `classic` keeps the 1.x color-blind kernel used as a validation baseline).
+- `config.yaml` — search budget (`testing: n_iter / restarts / schedule`), spreadsheet export toggle, per-mode core values and gates, `engine: tagged` (default; `classic` keeps the 1.x color-blind kernel used as a validation baseline).
 - `decks/` — deck shapes, constraints, implicit values (`wolds_implicits.json`), structural layouts.
 - `modifiers.json` / `vh_modifiers.json` — the card rosters (Wold's / vanilla).
 
 ### Other scripts
 
 - `uv run python scripts/implicit_impact.py` — one-pass balance leaderboard (screenshot-ready HTML + markdown) plus a second **balance-settings cycle-log sheet** (every core / implicit / greed / structural value that produced the numbers). The log is regenerated from live config on every run and must always accompany the leaderboard so balance cycles stay trackable — never hand-edit it. `--compare` runs the implicit on/off diff instead.
-- `uv run python scripts/parity_2_0.py --fast` — validation gate: proves the Python reference and both Rust kernels score identically.
+- `uv run python scripts/parity_2_0.py [--fast]` — validation gate: Part A proves the Python reference and the tagged kernel score identically; Part B checks the tagged SA finds at least what the classic SA finds (one-sided, re-scored, ~4 min full on all cores).
+- `uv run python scripts/bench_search.py` — search-quality bench: gap to best-known per (deck, panel, class, core set) for each search config in `scripts/bench_search.yaml`; `--reference` adds long runs that only raise best-known. Run it before changing SA defaults.
 
 ## Repo layout
 

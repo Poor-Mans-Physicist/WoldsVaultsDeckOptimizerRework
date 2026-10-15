@@ -973,9 +973,21 @@ scale_color; the Exact builder exposes both colors.
 `tagged` — implicits included on Wold's). `scripts/parity_2_0.py` is the
 gate: **Part A** proves scoring equivalence (random assignments over the
 shared vocabulary, Python reference `simulate()` vs Rust `score_tagged`;
-passes at rel-Δ ≤ 5e-16), **Part B** checks SA-optimum convergence
-(classic vs tagged-Max with implicits stripped and §6 off; all combos
-converge at the 60k×12 production budget). Run it after any kernel change.
+passes at rel-Δ ≤ 5e-16), **Part B** checks SA-optimum coverage
+(classic vs tagged-Max with implicits stripped and §6 off, seeded, all
+restarts run as Rust jobs on every core via `run_sa_jobs`). It is
+one-sided: the tagged best may trail the classic best by at most 0.5%,
+and every tagged layout that scores higher is re-scored by the Python
+reference (must match to 1e-9). The tagged side gets the deeper budget
+(240k×16 vs classic 120k×12). Shiny EQUILIBRIUM core sets are excluded:
+the classic kernel prices EQUILIBRIUM as the color-blind upper bound
+1 + roll × 4, the tagged kernel runs colors-real (5ad35be), so those
+optima differ by design. Run it after any kernel change.
+
+Known Part B shortfalls (2026-10-15): Shadow and Villager at `min 14 reg`
+trail by 0.6–0.8% — the stat floor binds exactly, the tagged SA's
+per-restart hit rate there is low (both are reached at 32×240k). Search
+weakness, not a scoring divergence.
 
 ### Core value entry is % (2026-07-14 rework)
 

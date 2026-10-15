@@ -168,6 +168,13 @@ testing:
     - { label: "unconstrained", min_regular: -1, max_greed: -1 }
   n_iter:   60000
   restarts: 12
+  # SA temperature schedule (tagged engine).
+  #   geometric: [t0, t1]                — absolute T in NDM units
+  #   target:    [a0, a1, t_init, eta]   — adaptive: accepted share of worse
+  #              moves tracks a0 → a1; t_init is relative to the start score
+  #   Target [0.5, 0.001, 0.02, 0.01] at 60k matches geometric 100 → 0.5 at
+  #   120k (scripts/bench_search.py, 2026-10-15).
+  schedule: { kind: target, params: [0.5, 0.001, 0.02, 0.01] }
 
 # Mode-specific overrides. Selected via the --mode CLI flag.
 modes:

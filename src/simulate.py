@@ -442,7 +442,11 @@ def sa_optimize(
     n_iter:     int,
     T_start:    float = 100.0,
     T_end:      float = 0.5,
+    defer:      bool = False,
+    seed:       Optional[int] = None,
 ) -> Tuple[Dict[Position, CardType], float]:
+    """One classic SA restart. ``defer=True`` returns a prepared job for
+    run_sa_jobs() instead of running it."""
     # ── Convert inputs for Rust ───────────────────────────────────────────────
     slots_list = list(deck.slots)                        # consistent ordering
     slot_order = {p: i for i, p in enumerate(slots_list)}
@@ -462,7 +466,7 @@ def sa_optimize(
     auto_place_arcane = _cfg.AUTO_PLACE_ARCANE
 
     # ── Call Rust ─────────────────────────────────────────────────────────────
-    asgn_strs, best_score = _ndm_core.run_sa_optimize(
+    out = _ndm_core.run_sa_optimize(
         slots               = slots_list,
         row_peers           = row_peers_idx,
         col_peers           = col_peers_idx,
@@ -506,7 +510,12 @@ def sa_optimize(
         experimental_exponent     = EXPERIMENTAL_EXPONENT,
         experimental_boost        = EXPERIMENTAL_BOOST,
         deluxe_counted_as_regular = DELUXE_COUNTED_AS_REGULAR,
+        defer                     = defer,
+        seed                      = seed,
     )
+    if defer:
+        return out
+    asgn_strs, best_score = out
 
     # ── Convert result back to Python format ──────────────────────────────────
     best_asgn = {
@@ -590,6 +599,18 @@ def _live_auto_place_arcane() -> bool:
     return _cfg.AUTO_PLACE_ARCANE
 
 
+def run_sa_jobs(jobs: list) -> list:
+    """Run jobs from ``sa_optimize*(..., defer=True)`` across all cores in
+    Rust (rayon, GIL released). Returns raw (assignment, score) tuples in job
+    order — scores are what the gates and benches need."""
+    return _ndm_core.run_sa_jobs(jobs)
+
+
+def _live_sa_schedule() -> Tuple[str, List[float]]:
+    from . import config as _cfg
+    return _cfg.SA_SCHEDULE
+
+
 def sa_optimize_tagged(
     deck:       Deck,
     card_class: CardClass,
@@ -598,6 +619,8 @@ def sa_optimize_tagged(
     implicits:  Optional[List[tuple]] = None,
     seed:       Optional[int] = None,
     final_pass: Optional[bool] = None,
+    schedule:   Optional[Tuple[str, List[float]]] = None,
+    defer:      bool = False,
 ) -> Tuple[Dict[Position, CardType], float]:
     """One SA restart through the 2.0 tag-aware kernel in Max configuration.
 
@@ -625,7 +648,7 @@ def sa_optimize_tagged(
 
     tag_rules, min_stat = _tagged_rules(deck)
 
-    asgn_list, score = _ndm_core.run_sa_tagged(
+    out = _ndm_core.run_sa_tagged(
         slots               = slots_list,
         row_peers           = _peers_as_indices(slot_order, deck._row_peers, slots_list),
         col_peers           = _peers_as_indices(slot_order, deck._col_peers, slots_list),
@@ -676,7 +699,12 @@ def sa_optimize_tagged(
         floor_counts_deluxe    = DELUXE_COUNTED_AS_REGULAR,
         seed                   = seed,
         legal_combos           = LEGAL_COMBOS if assignable else None,
+        schedule               = schedule or _live_sa_schedule(),
+        defer                  = defer,
     )
+    if defer:
+        return out
+    asgn_list, score = out
 
     best_asgn = {
         slots_list[i]: CardType(asgn_list[i][0])

@@ -8,19 +8,26 @@ Two checks against the classic 1.x kernel, run in the active --mode:
      ``score_tagged`` in Max configuration. Must match to 1e-9. This proves
      the scoring math is identical where the models overlap.
 
-  B. OPTIMUM equivalence — run the classic SA and the tagged-Max SA
-     (implicits stripped, §6 final pass off) on every deck × class × panel
-     config and compare best-of-restarts scores within a relative tolerance.
-     SA is stochastic, so B is a convergence check, not a proof; A is the
-     proof.
+  B. OPTIMUM coverage — run the classic SA and the tagged-Max SA (seeded,
+     implicits stripped, §6 final pass off) on every deck × class × panel
+     config. One-sided: the tagged best may trail the classic best by at
+     most TOL_OPT; where it is higher, its layout is re-scored by the Python
+     reference and must match to TOL_SCORE. Shiny EQUILIBRIUM core sets are
+     excluded (deliberate model split). SA is stochastic, so B is a search
+     check; A is the scoring proof.
 
 Run:  uv run python scripts/parity_2_0.py [--mode vanilla] [--fast]
+          [--schedule config|geometric|target] [--only-b]
+
+Part B runs every SA restart as a Rust job on all cores (run_sa_jobs).
 """
 from __future__ import annotations
 
 import argparse
 import random
 import sys
+import time
+import zlib
 from pathlib import Path
 
 # Windows consoles default to cp1252 — force UTF-8 so the report glyphs print.
@@ -33,12 +40,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _ap = argparse.ArgumentParser()
 _ap.add_argument("--mode", default="wolds")
 _ap.add_argument("--fast", action="store_true", help="fewer decks / iterations")
+_ap.add_argument("--schedule", default="config", choices=["config", "geometric", "target"],
+                 help="tagged SA schedule for Part B (geometric = legacy 100 → 0.5)")
+_ap.add_argument("--only-b", action="store_true", help="skip Part A")
 _ARGS, _ = _ap.parse_known_args()
 
 from src.config import DECKS, MODE, _get_test_configs  # noqa: E402
-from src.types import CardClass, CardType  # noqa: E402
+from src.types import CardClass, CardType, CoreType  # noqa: E402
 from src.simulate import (  # noqa: E402
-    candidate_cores, sa_optimize, sa_optimize_tagged, simulate,
+    candidate_cores, run_sa_jobs, sa_optimize, sa_optimize_tagged, simulate,
     _peers_as_indices, _get_placeable,
 )
 from src import simulate as _sim  # noqa: E402
@@ -54,7 +64,7 @@ _SHARED = [
 ]
 
 TOL_SCORE = 1e-9      # part A: identical math
-TOL_OPT   = 5e-3      # part B: relative SA-convergence tolerance
+TOL_OPT   = 5e-3      # part B: max relative shortfall of tagged vs classic
 
 
 def _random_assignment(deck, card_class, rng):
@@ -155,33 +165,79 @@ def part_a(decks, rng, k_per_combo=25):
     return fails == 0
 
 
-def part_b(decks, n_iter, restarts):
-    print(f"── Part B: SA optimum convergence ({len(decks)} decks, {n_iter} iters × {restarts} restarts)")
-    fails = 0
+def part_b(decks, n_iter, restarts, t_iter, t_restarts, schedule):
+    print(f"── Part B: SA optimum coverage ({len(decks)} decks, classic {n_iter} × {restarts}, "
+          f"tagged {t_iter} × {t_restarts}, "
+          f"tagged schedule {schedule or 'from config'})")
+    # One-sided: the tagged kernel must find at least what the classic kernel
+    # finds (within TOL_OPT); it gets the deeper budget, since the check is
+    # coverage, not a race. Where it finds MORE, its layout is re-scored by
+    # the Python reference simulate() — a match proves the extra score is a
+    # legal layout in the shared model, not a scoring divergence.
+    # Shiny EQUILIBRIUM is a deliberate model split (5ad35be): the classic
+    # kernel prices it as the color-blind upper bound 1 + roll × 4, the
+    # tagged kernel runs colors-real and prices it game-exactly. Those core
+    # sets can't converge, so they're excluded here.
+    # Every restart of both kernels is one seeded Rust job; run_sa_jobs
+    # spreads them over all cores.
+    combos, jobs, skipped = [], [], 0
     for deck in decks:
         for label, min_reg, max_greed in _get_test_configs(deck):
             cdeck = deck.with_constraints(min_reg, max_greed)
             for card_class in CardClass:
-                best_c = -1.0
-                best_t = -1.0
+                ci = len(combos)
+                combos.append((deck.name, label, card_class, cdeck))
                 for cores in candidate_cores(card_class, cdeck):
-                    for _ in range(restarts):
-                        _, sc = sa_optimize(cdeck, card_class, cores, n_iter=n_iter)
-                        best_c = max(best_c, sc)
-                        _, st = sa_optimize_tagged(
+                    if card_class == CardClass.SHINY and CoreType.EQUILIBRIUM in cores:
+                        skipped += 1
+                        continue
+                    cs = "+".join(sorted(c.value for c in cores))
+                    tag = f"{deck.name}|{label}|{card_class.value}|{cs}"
+                    for k in range(restarts):
+                        jobs.append((ci, 0, cores, sa_optimize(
                             cdeck, card_class, cores, n_iter=n_iter,
-                            implicits=[], final_pass=False,
-                        )
-                        best_t = max(best_t, st)
-                rel = abs(best_c - best_t) / max(1.0, abs(best_c))
-                ok = rel <= TOL_OPT
-                flag = "✓" if ok else "✗"
-                if not ok:
-                    fails += 1
-                print(f"  {flag} {deck.name:<28s} [{label:>13s}] {card_class.value:<5s} "
-                      f"classic={best_c:10.3f} tagged={best_t:10.3f} relΔ={rel:.2e}")
+                            seed=zlib.crc32(f"{tag}|{k}|classic".encode()), defer=True,
+                        )))
+                    for k in range(t_restarts):
+                        jobs.append((ci, 1, cores, sa_optimize_tagged(
+                            cdeck, card_class, cores, n_iter=t_iter,
+                            implicits=[], final_pass=False, schedule=schedule,
+                            seed=zlib.crc32(f"{tag}|{k}|tagged".encode()), defer=True,
+                        )))
+    t0 = time.perf_counter()
+    outs = run_sa_jobs([j[3] for j in jobs])
+    print(f"  {len(jobs)} SA runs in {time.perf_counter() - t0:.1f}s "
+          f"({skipped} shiny EQUILIBRIUM core sets excluded)")
+    best = [[(-1.0, None, None), (-1.0, None, None)] for _ in combos]
+    for (ci, side, cores, _), (asgn, score) in zip(jobs, outs):
+        if score > best[ci][side][0]:
+            best[ci][side] = (score, cores, asgn)
+
+    lower = mismatch = higher = 0
+    for (name, label, card_class, cdeck), (bc, bt) in zip(combos, best):
+        best_c, best_t = bc[0], bt[0]
+        short = (best_c - best_t) / max(1.0, abs(best_c))
+        note, ok = "", True
+        if short > TOL_OPT:
+            ok, note = False, "  (tagged LOWER)"
+            lower += 1
+        elif best_t > best_c and bt[2] is not None:
+            higher += 1
+            slots_list = list(cdeck.slots)
+            asgn = {slots_list[i]: CardType(c[0]) for i, c in enumerate(bt[2])}
+            ref = simulate(cdeck, asgn, card_class, bt[1])
+            d = abs(ref - best_t) / max(1.0, abs(ref))
+            if d > TOL_SCORE:
+                ok, note = False, f"  (tagged higher, re-score MISMATCH py={ref:.6f})"
+                mismatch += 1
+            else:
+                note = "  (tagged higher, re-scored ✓)"
+        print(f"  {'✓' if ok else '✗'} {name:<28s} [{label:>13s}] {card_class.value:<5s} "
+              f"classic={best_c:10.3f} tagged={best_t:10.3f} Δ={(best_t - best_c) / max(1.0, abs(best_c)):+.2e}{note}")
+    fails = lower + mismatch
     status = "PASS" if fails == 0 else "FAIL"
-    print(f"  Part B: {status} — {fails} combos beyond tolerance {TOL_OPT}")
+    print(f"  Part B: {status} — {lower} combos with tagged below classic by > {TOL_OPT}, "
+          f"{mismatch} re-score mismatches; {higher} tagged-higher layouts re-scored")
     return fails == 0
 
 
@@ -190,12 +246,20 @@ def main():
     decks = list(DECKS)
     if _ARGS.fast:
         decks = decks[:6]
-        n_iter, restarts, k = 20_000, 4, 8
+        n_iter, restarts, t_iter, t_restarts, k = 40_000, 4, 80_000, 6, 8
     else:
-        n_iter, restarts, k = 40_000, 6, 25
+        n_iter, restarts, t_iter, t_restarts, k = 120_000, 12, 240_000, 16, 25
+    schedule = {
+        "config": None,
+        "geometric": ("geometric", [100.0, 0.5]),
+        "target": ("target", [0.5, 0.001, 0.02, 0.01]),
+    }[_ARGS.schedule]
     print(f"[parity 2.0] mode={MODE}  decks={len(decks)}")
-    ok_a = part_a(decks, rng, k_per_combo=k)
-    ok_b = part_b(decks, n_iter, restarts)
+    t0 = time.perf_counter()
+    ok_a = True if _ARGS.only_b else part_a(decks, rng, k_per_combo=k)
+    if not _ARGS.only_b:
+        print(f"  ({time.perf_counter() - t0:.1f}s)")
+    ok_b = part_b(decks, n_iter, restarts, t_iter, t_restarts, schedule)
     if ok_a and ok_b:
         print("\nVALIDATION GATE: PASS")
         sys.exit(0)

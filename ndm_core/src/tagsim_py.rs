@@ -10,8 +10,8 @@ use crate::tagsim::{
     group_bit_from_str, group_bits_to_strs, run_sa_tagged as run_core,
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
-    CoreSpecIn, Implicit, SlotCard, TagAxis, TagRule, TagRun, TagSimConfig,
-    COLOR_NONE,
+    CoreSpecIn, Implicit, SaSchedule, SlotCard, TagAxis, TagRule, TagRun,
+    TagSimConfig, COLOR_NONE, SCHEDULE_LEGACY,
 };
 
 /// Stack tuple: (type, color, scale_color, groups, count, min_place).
@@ -137,14 +137,73 @@ fn build_run<'a>(
     n_iter: usize,
     restarts: usize,
     seed: Option<u64>,
+    sched: SaSchedule,
     cfg: TagSimConfig,
 ) -> TagRun<'a> {
     TagRun {
         slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, stacks, tag_rules, blanket_groups,
         assignable_groups, legal_combos, implicits, cores, min_stat_placed,
-        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, cfg,
+        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, cfg,
     }
+}
+
+/// `("geometric", [t0, t1])` or `("target", [a0, a1, t_init, eta])`;
+/// None keeps the legacy geometric 100 → 0.5.
+fn parse_schedule(s: &Option<(String, Vec<f64>)>) -> PyResult<SaSchedule> {
+    let Some((kind, p)) = s else { return Ok(SCHEDULE_LEGACY) };
+    match (kind.as_str(), p.as_slice()) {
+        ("geometric", &[t0, t1]) => Ok(SaSchedule::Geometric { t0, t1 }),
+        ("target", &[a0, a1, t_init, eta]) => Ok(SaSchedule::Target { a0, a1, t_init, eta }),
+        _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "bad schedule {kind:?} {p:?}: want geometric [t0, t1] or target [a0, a1, t_init, eta]"
+        ))),
+    }
+}
+
+/// A prepared tagged SA run (`run_sa_tagged(..., defer=True)`): an owned
+/// TagRun, executed later by `run_sa_jobs`.
+#[pyclass(frozen)]
+pub struct TaggedJob {
+    slots: Vec<(i32, i32)>,
+    row_peers: Vec<Vec<usize>>,
+    col_peers: Vec<Vec<usize>>,
+    surr_peers: Vec<Vec<usize>>,
+    diag_peers: Vec<Vec<usize>>,
+    arcane_slot_indices: Vec<usize>,
+    stacks: Vec<CardSpec>,
+    tag_rules: Vec<TagRule>,
+    blanket_groups: u16,
+    assignable_groups: u16,
+    legal_combos: Vec<u16>,
+    implicits: Vec<Implicit>,
+    cores: Vec<CoreSpecIn>,
+    min_stat_placed: u32,
+    final_pass_nonfoil_evo: bool,
+    exact_groups: bool,
+    n_iter: usize,
+    restarts: usize,
+    seed: Option<u64>,
+    sched: SaSchedule,
+    cfg: TagSimConfig,
+}
+
+impl TaggedJob {
+    pub fn run(&self) -> (Vec<SlotCard>, f64) {
+        run_core(build_run(
+            &self.slots, self.row_peers.clone(), self.col_peers.clone(),
+            self.surr_peers.clone(), self.diag_peers.clone(),
+            self.arcane_slot_indices.clone(), self.stacks.clone(),
+            self.tag_rules.clone(), self.blanket_groups, self.assignable_groups,
+            self.legal_combos.clone(), self.implicits.clone(), self.cores.clone(),
+            self.min_stat_placed, self.final_pass_nonfoil_evo, self.exact_groups,
+            self.n_iter, self.restarts, self.seed, self.sched, self.cfg,
+        ))
+    }
+}
+
+pub fn tagged_result(py: Python<'_>, asgn: &[SlotCard], score: f64) -> PyObject {
+    (placed_to_py(asgn), score).into_py(py)
 }
 
 fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
@@ -165,9 +224,10 @@ fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny, auto_place_arcane,
     colors_real, complex_cards, wv_foil_rules, floor_counts_deluxe,
-    seed = None, legal_combos = None,
+    seed = None, legal_combos = None, schedule = None, defer = false,
 ))]
 pub fn run_sa_tagged(
+    py: Python<'_>,
     slots: Vec<(i32, i32)>,
     row_peers: Vec<Vec<usize>>,
     col_peers: Vec<Vec<usize>>,
@@ -210,7 +270,9 @@ pub fn run_sa_tagged(
     floor_counts_deluxe: bool,
     seed: Option<u64>,
     legal_combos: Option<Vec<Vec<String>>>,
-) -> PyResult<(Vec<PyPlaced>, f64)> {
+    schedule: Option<(String, Vec<f64>)>,
+    defer: bool,
+) -> PyResult<PyObject> {
     let cfg = TagSimConfig {
         mult_dir_vert, mult_dir_horiz, mult_pure_base, mult_pure_scale,
         mult_equilibrium, mult_foil, mult_steadfast, mult_sparkling,
@@ -226,17 +288,25 @@ pub fn run_sa_tagged(
         override_: *o,
     }).collect();
 
-    let run = build_run(
-        &slots, row_peers, col_peers, surr_peers, diag_peers,
-        arcane_slot_indices, parse_stacks(&stacks), parse_rules(&tag_rules),
-        parse_group_list(&blanket_groups), parse_group_list(&assignable_groups),
-        parse_combo_masks(&legal_combos),
-        parse_implicits(&implicits), cores_in, min_stat_placed,
-        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, cfg,
-    );
-
-    let (asgn, score) = run_core(run);
-    Ok((placed_to_py(&asgn), score))
+    let job = TaggedJob {
+        slots, row_peers, col_peers, surr_peers, diag_peers,
+        arcane_slot_indices,
+        stacks: parse_stacks(&stacks),
+        tag_rules: parse_rules(&tag_rules),
+        blanket_groups: parse_group_list(&blanket_groups),
+        assignable_groups: parse_group_list(&assignable_groups),
+        legal_combos: parse_combo_masks(&legal_combos),
+        implicits: parse_implicits(&implicits),
+        cores: cores_in, min_stat_placed, final_pass_nonfoil_evo, exact_groups,
+        n_iter, restarts, seed,
+        sched: parse_schedule(&schedule)?,
+        cfg,
+    };
+    if defer {
+        return Ok(Py::new(py, job)?.into_py(py));
+    }
+    let (asgn, score) = job.run();
+    Ok(tagged_result(py, &asgn, score))
 }
 
 #[pyfunction]
@@ -301,7 +371,8 @@ pub fn score_tagged(
     let run = build_run(
         &slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, Vec::new(), Vec::new(), 0, 0, Vec::new(),
-        parse_implicits(&implicits), cores_in, 0, false, true, 0, 1, None, cfg,
+        parse_implicits(&implicits), cores_in, 0, false, true, 0, 1, None,
+        SCHEDULE_LEGACY, cfg,
     );
 
     Ok(score_core(&run, &placed_from_py(&assignment)))

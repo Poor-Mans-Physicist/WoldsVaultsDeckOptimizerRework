@@ -41,15 +41,8 @@ ENGINE: str = str(_CFG.get("engine", "tagged"))
 # Top-level optimizer
 # ──────────────────────────────────────────────────────────────────────────────
 
-def optimize(
-    deck:     Deck,
-    n_iter:   int,
-    restarts: int,
-    verbose:  bool = True,
-) -> Dict[CardClass, dict]:
-    """Run SA across every candidate core set for both card classes."""
-    results: Dict[CardClass, dict] = {}
-
+def deck_implicits(deck: Deck) -> list:
+    """Implicit tuples the tagged kernel scores for this deck."""
     # Deck implicits are a Wold's-only mechanic; the tagged engine evaluates
     # them inside the kernel. Classic engine ignores them (pre-2.0 behavior).
     # IMPLICITS_ENABLED (config `implicits.enabled` / --no-implicits) scores
@@ -63,6 +56,18 @@ def optimize(
     forced = STRUCTURAL_IMPLICITS.get(deck.key)
     if forced and MODE != "vanilla" and IMPLICITS_ENABLED:
         implicits = [t for k in forced for t in implicits_for_deck(k)]
+    return implicits
+
+
+def optimize(
+    deck:     Deck,
+    n_iter:   int,
+    restarts: int,
+    verbose:  bool = True,
+) -> Dict[CardClass, dict]:
+    """Run SA across every candidate core set for both card classes."""
+    results: Dict[CardClass, dict] = {}
+    implicits = deck_implicits(deck)
 
     for card_class in CardClass:
         candidates = candidate_cores(card_class, deck)

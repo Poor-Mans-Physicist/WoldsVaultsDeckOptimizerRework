@@ -1,0 +1,44 @@
+# Search-quality bench for the tagged SA (scripts/bench_search.py).
+# A problem is one (deck, panel config, class, core set) — the unit the
+# spreadsheet's optimize() runs restarts on. Gaps are relative to the best
+# score ever recorded for that problem (scripts/bench_best_known.json).
+
+replicates: 12      # independent best-of-`restarts` runs per config
+
+problems:
+  # Count-coupled cores (deluxe / void / equilibrium) — the hard cases.
+  - { deck: The Crate Deck,   panel: unconstrained, cls: evo,   cores: [deluxe_core, foil, pure] }
+  - { deck: The Crate Deck,   panel: unconstrained, cls: evo,   cores: [color, deluxe_core, foil] }
+  - { deck: The Crate Deck,   panel: unconstrained, cls: evo,   cores: [deluxe_core, foil, void_core] }
+  - { deck: The Crate Deck,   panel: unconstrained, cls: shiny, cores: [deluxe_core, equilibrium, pure] }
+  - { deck: The Crate Deck,   panel: unconstrained, cls: shiny, cores: [deluxe_core, pure, void_core] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: shiny, cores: [equilibrium, foil, void_core] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: shiny, cores: [deluxe_core, equilibrium, foil] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: shiny, cores: [equilibrium, pure, void_core] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: shiny, cores: [equilibrium, foil, sparkling] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: evo,   cores: [color, foil] }
+  - { deck: The Velara Deck,  panel: unconstrained, cls: evo,   cores: [color, pure, void_core] }
+  # Mostly-solved cases (regression guard).
+  - { deck: The Crate Deck,   panel: unconstrained, cls: evo,   cores: [color, foil] }
+  - { deck: The Crate Deck,   panel: unconstrained, cls: shiny, cores: [equilibrium, foil, pure] }
+  - { deck: The Mystery Deck, panel: unconstrained, cls: shiny, cores: [equilibrium, pure] }
+  - { deck: The Mystery Deck, panel: unconstrained, cls: evo,   cores: [archive_core, foil] }
+  # Other panel constraints, implicits and kernel paths.
+  - { deck: The Crate Deck,   panel: min 14 reg,    cls: evo,   cores: [color, foil, pure] }
+  - { deck: The Velara Deck,  panel: no greed,      cls: shiny, cores: [equilibrium, foil, pure] }
+  - { deck: The Snake Deck,   panel: unconstrained, cls: evo,   cores: [deluxe_core, foil, pure] }   # chain → full simulate()
+  - { deck: The Arcane Deck,  panel: unconstrained, cls: evo,   cores: [archive_core, color, foil, pure] }   # 11 slots → no delta
+  - { deck: The Mutant Deck,  panel: unconstrained, cls: shiny, cores: [deluxe_core, equilibrium, foil, pure] }
+  - { deck: The Rook Deck,    panel: unconstrained, cls: evo,   cores: [deluxe_core, foil, void_core] }
+
+# Search configs. schedule = [kind, params] as in config.yaml testing.schedule.
+configs:
+  geo_60k:      { n_iter: 60000,  restarts: 12, schedule: [geometric, [100.0, 0.5]] }
+  geo_120k:     { n_iter: 120000, restarts: 12, schedule: [geometric, [100.0, 0.5]] }
+  tgt_30k:      { n_iter: 30000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+  tgt_60k:      { n_iter: 60000,  restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+  tgt_120k:     { n_iter: 120000, restarts: 12, schedule: [target, [0.5, 0.001, 0.02, 0.01]] }
+
+# Long runs that only feed best-known (run with --reference).
+reference:
+  geo_1m:       { n_iter: 1000000, restarts: 8, schedule: [geometric, [100.0, 0.5]] }
