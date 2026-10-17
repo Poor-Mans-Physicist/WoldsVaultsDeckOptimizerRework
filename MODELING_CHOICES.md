@@ -1236,3 +1236,28 @@ card reality. The CLI reads the same per-mode file via
   ignored `sa_bench` test in `ndm_core/src/lib.rs` (run with
   `cargo test --release -- --ignored --nocapture bench_sa`) is the
   controlled instrument used for the old-vs-new comparison.
+
+### Build-weighted objective: archetype mode (2026-10-17)
+
+An optional kernel objective (`TagRun.value_model`, `src/archetype.py`) replaces NDM with what a deck is worth to a
+group of builds from the Wold's Vaults build ledger (wv-combat-model, greed-rework card system). NDM mode is
+unchanged and bit-identical when no value model is passed.
+
+- **Honest tags.** Every stat card is its own stack (slot type × stat card) carrying the card's real groups from the
+  ledger's catalog (rework bans and stage tier applied); runs use `exact_groups` (no blanket tags). Under a Foil core
+  every stat card is Foil (§5 run-level rule). Greed and arcane stacks carry no stat.
+- **Value.** A placed card adds `finish_term × card value` to its attribute's deck total (the same per-slot multiplier
+  the ledger computes; `scripts/archetype_parity.py` checks every attribute total against the ledger to 1e-9). The
+  score is `Σ_builds weight × (min(damage, survival) + extras)`, where each build's damage and survival are its
+  cycles plus per-attribute curves probed in the ledger (`tools/deck_weights.py`: one attribute's deck total swept
+  0..max, gear fixed). Curves are piecewise linear on each build's own probe grid.
+- **Requirement penalties are excluded by default.** With gear fixed, dropping a CDR / mana-regen / movement stat
+  looks catastrophic, but a re-anneal moves that stat onto gear (one shared deck serves every build). The objective
+  assumes gear covers the requirements; `value_terms(penalties=True)` keeps them for diagnostics.
+- **Tag cores** (Arsenal/Aegis/Tool/Natural/Fae, `cores.tag_core` = 1.25, greater max) are additive per-group
+  bonuses passed as global implicits; they exist only in archetype mode (Max mode's blanket tags would apply them to
+  every card).
+- **Search.** In value mode half of the replacements keep the slot's card type and redraw only its stat.
+- **Known limitation.** The model is separable per attribute; it ranks decks well (picks each build's true best of
+  42 decks for 39–41/42 builds) but its absolute errors are large once several requirement stats move at once. The
+  ledger's re-anneal (`tools/deck_study.py`) has the final say on any deck it proposes.

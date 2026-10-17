@@ -232,6 +232,83 @@ pub struct CardSpec {
     pub min_place: u32,   // lower bound ("must place" / forced)
 }
 
+/// Build-weighted objective (archetype mode). Per stack: the card's stat value at the stage tier and the attribute
+/// it feeds (NO_ATTR = none). A placed card adds slot multiplier x value to its attribute's deck total. The score is
+/// sum over terms of weight x (min over the term's channels of (base + sum of channel curves) + sum of extra curves),
+/// each curve piecewise linear on a uniform grid over the attribute's deck total (flat outside it, zero when empty).
+/// A term is one build: damage and survival channels plus additive extras (threshold penalties). One single-channel
+/// term is a plain per-attribute sum. None keeps the NDM objective.
+#[derive(Clone, Debug)]
+pub struct ValueModel {
+    pub stack_value: Vec<f64>,
+    pub stack_attr: Vec<u8>,
+    pub terms: Vec<ValueTerm>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValueTerm {
+    pub weight: f64,
+    pub channels: Vec<ValueChannel>,
+    pub extra: Vec<Curve>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValueChannel {
+    pub base: f64,
+    pub curves: Vec<Curve>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Curve {
+    pub x0: f64,
+    pub dx: f64,
+    pub ys: Vec<f64>,
+}
+
+pub const NO_ATTR: u8 = u8::MAX;
+pub const MAX_VALUE_ATTRS: usize = 32;
+
+impl Curve {
+    #[inline(always)]
+    fn at(&self, x: f64) -> f64 {
+        let n = self.ys.len();
+        if n == 0 { return 0.0; }
+        let t = (x - self.x0) / self.dx;
+        if t <= 0.0 { return self.ys[0]; }
+        let i = t as usize;
+        if i >= n - 1 { return self.ys[n - 1]; }
+        let f = t - i as f64;
+        self.ys[i] + (self.ys[i + 1] - self.ys[i]) * f
+    }
+}
+
+impl ValueModel {
+    #[inline(always)]
+    fn slot(&self, c: &SlotCard) -> Option<(usize, f64)> {
+        let si = c.stack as usize;
+        if c.t == T_DEAD || si >= self.stack_attr.len() { return None; }
+        let a = self.stack_attr[si];
+        if a == NO_ATTR { None } else { Some((a as usize, self.stack_value[si])) }
+    }
+
+    #[inline(always)]
+    fn score(&self, x: &[f64; MAX_VALUE_ATTRS]) -> f64 {
+        let mut s = 0.0f64;
+        for t in &self.terms {
+            let mut lo = f64::INFINITY;
+            for ch in &t.channels {
+                let mut v = ch.base;
+                for (a, c) in ch.curves.iter().enumerate() { v += c.at(x[a]); }
+                if v < lo { lo = v; }
+            }
+            if !lo.is_finite() { lo = 0.0; }
+            for (a, c) in t.extra.iter().enumerate() { lo += c.at(x[a]); }
+            s += t.weight * lo;
+        }
+        s
+    }
+}
+
 /// A per-tag constraint rule (Targeted). `max == u32::MAX` = uncapped.
 #[derive(Clone, Copy)]
 pub struct TagRule {
@@ -328,6 +405,7 @@ pub struct TagRun<'a> {
     pub seed: Option<u64>,
     pub sched: SaSchedule,
     pub opts: SearchOpts,
+    pub value_model: Option<ValueModel>,
     pub cfg: TagSimConfig,
 }
 
@@ -507,6 +585,7 @@ struct Cores {
     color_core_color: u8,
     has_color_core: bool,
     foil_active: bool,
+    vm: Option<ValueModel>,
 }
 
 impl Cores {
@@ -521,7 +600,7 @@ impl Cores {
                 _ => {}
             }
         }
-        Cores { list: specs.to_vec(), color_core_color, has_color_core, foil_active }
+        Cores { list: specs.to_vec(), color_core_color, has_color_core, foil_active, vm: None }
     }
 }
 
@@ -1213,6 +1292,16 @@ fn simulate(
         counts: &s.counts, der: &der,
         chain_id: &s.chain_id, chain_size: &s.chain_size,
     };
+    if let Some(vm) = &cores.vm {
+        let mut x = [0.0f64; MAX_VALUE_ATTRS];
+        for i in 0..n {
+            let si = slot_scan(&ctx, asgn, i);
+            if !si.contributes { continue; }
+            let t = finish_term(&ctx, asgn, i, &si, s.boost[i]);
+            if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += t * v; }
+        }
+        return vm.score(&x);
+    }
     let mut ndm = 0.0f64;
     for i in 0..n {
         let si = slot_scan(&ctx, asgn, i);
@@ -1476,14 +1565,22 @@ impl DeltaEval {
             j_score: 0.0,
             j_mode: J_LOCAL,
         };
-        d.score = d.resum();
+        d.score = d.resum(asgn, cores);
         d
     }
 
     /// Sum cached terms in slot order with simulate()'s skip structure —
     /// the same adds in the same order, so the same bits.
     #[inline(always)]
-    fn resum(&self) -> f64 {
+    fn resum(&self, asgn: &[SlotCard], cores: &Cores) -> f64 {
+        if let Some(vm) = &cores.vm {
+            let mut x = [0.0f64; MAX_VALUE_ATTRS];
+            for (i, si) in self.inputs.iter().enumerate() {
+                if !si.contributes { continue; }
+                if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += self.term[i] * v; }
+            }
+            return vm.score(&x);
+        }
         let mut ndm = 0.0f64;
         for (i, si) in self.inputs.iter().enumerate() {
             if si.contributes { ndm += self.term[i]; }
@@ -1686,7 +1783,7 @@ impl DeltaEval {
             }
         }
 
-        self.score = self.resum();
+        self.score = self.resum(asgn, cores);
         self.score
     }
 
@@ -2396,6 +2493,11 @@ fn sa_one_restart(
         else { regular_options.push(si); }
     }
 
+    // Value mode: half the replacements keep the slot's card type and redraw only its stat.
+    let value_mode = cores.vm.is_some();
+    let mut by_type: Vec<Vec<usize>> = vec![Vec::new(); N_TYPES];
+    for &si in &regular_options { by_type[run.stacks[si].t as usize].push(si); }
+
     // Assignable group bits (Targeted toggle moves).
     let assignable_bits: Vec<u16> = (0..N_GROUP_BITS)
         .map(|b| 1u16 << b)
@@ -2447,8 +2549,13 @@ fn sa_one_restart(
                     // Regular stacks (or arcane stacks for arcane slots when
                     // auto-place is OFF) + DEAD.
                     let opts = if geom.is_arcane_slot[p] { &arcane_options } else { &regular_options };
-                    let pick = rng.gen_range(0..opts.len() + 1);
-                    let si = if pick == opts.len() { DEAD_OPTION } else { opts[pick] };
+                    let same = &by_type[old.t as usize];
+                    let si = if value_mode && !geom.is_arcane_slot[p] && same.len() > 1 && rng.gen_bool(0.5) {
+                        same[rng.gen_range(0..same.len())]
+                    } else {
+                        let pick = rng.gen_range(0..opts.len() + 1);
+                        if pick == opts.len() { DEAD_OPTION } else { opts[pick] }
+                    };
                     let Some(sc) = w.replace(p, si) else { break 'prop false };
                     if temper.accept(sc - w.score, &mut rng) { w.accept(sc); }
                     else { w.undo_replace(p, si, old); }
@@ -2508,7 +2615,8 @@ fn sa_one_restart(
 /// Run the full SA (serial restarts; callers parallelize outside).
 pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
     let geom = build_geom(&run);
-    let cores = Cores::build(&run.cores);
+    let mut cores = Cores::build(&run.cores);
+    cores.vm = run.value_model.clone();
 
     // Foil ban (Targeted foil max = 0) suppresses the run-level foil bit.
     let foil_banned = run.tag_rules.iter().any(|r|
@@ -2586,7 +2694,8 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
 /// what-if popup verification, and snapshot restores.
 pub fn score_tagged(run: &TagRun<'_>, asgn: &[SlotCard]) -> f64 {
     let geom = build_geom(run);
-    let cores = Cores::build(&run.cores);
+    let mut cores = Cores::build(&run.cores);
+    cores.vm = run.value_model.clone();
     let mut s = Scratch::new(&geom);
     simulate(&geom, asgn, &cores, &run.implicits, &run.cfg, &mut s)
 }
@@ -2765,14 +2874,42 @@ mod delta_tests {
                 seed: None,
                 sched: SCHEDULE_LEGACY,
                 opts: SearchOpts::default(),
+                value_model: None,
                 cfg: cfg_v,
             };
             let geom = build_geom(&run);
-            let cores = Cores::build(&core_specs);
+            let mut cores = Cores::build(&core_specs);
+            const K: usize = 6;
+            if case % 2 == 1 {
+                let n_attr = rng.gen_range(1..5usize);
+                let stack_value = (0..K).map(|_| rng.gen_range(0.01..10.0)).collect();
+                let stack_attr = (0..K).map(|_| if rng.gen_bool(0.2) { NO_ATTR }
+                                               else { rng.gen_range(0..n_attr) as u8 }).collect();
+                let terms = (0..rng.gen_range(1..4usize)).map(|_| ValueTerm {
+                    weight: rng.gen_range(0.1..1.0),
+                    channels: (0..rng.gen_range(1..3usize)).map(|_| ValueChannel {
+                        base: rng.gen_range(-2.0..2.0),
+                        curves: (0..n_attr).map(|_| Curve {
+                            x0: 0.0, dx: rng.gen_range(1.0..500.0),
+                            ys: (0..16).map(|_| rng.gen_range(-3.0..3.0)).collect(),
+                        }).collect(),
+                    }).collect(),
+                    extra: (0..n_attr).map(|_| Curve {
+                        x0: 0.0, dx: rng.gen_range(1.0..500.0),
+                        ys: (0..rng.gen_range(0..8usize)).map(|_| rng.gen_range(-3.0..3.0)).collect(),
+                    }).collect(),
+                }).collect();
+                cores.vm = Some(ValueModel { stack_value, stack_attr, terms });
+            }
             let cfg = &run.cfg;
             let mut sc = Scratch::new(&geom);
+            let card = |rng: &mut SmallRng| -> SlotCard {
+                let mut c = rand_card(rng);
+                if c.t != T_DEAD { c.stack = rng.gen_range(0..K as u16); }
+                c
+            };
 
-            let mut asgn: Vec<SlotCard> = (0..n).map(|_| rand_card(&mut rng)).collect();
+            let mut asgn: Vec<SlotCard> = (0..n).map(|_| card(&mut rng)).collect();
             let mut d = DeltaEval::new(&geom, &asgn, &cores, &implicits, cfg);
             let full0 = simulate(&geom, &asgn, &cores, &implicits, cfg, &mut sc);
             assert_eq!(d.score.to_bits(), full0.to_bits(), "case {}: init mismatch", case);
@@ -2784,7 +2921,7 @@ mod delta_tests {
                     0 => {
                         let p = rng.gen_range(0..n);
                         let old = asgn[p];
-                        asgn[p] = rand_card(&mut rng);
+                        asgn[p] = card(&mut rng);
                         changed.push((p, old));
                     }
                     1 if n >= 2 => {
@@ -2860,6 +2997,7 @@ mod delta_tests {
             seed: Some(42),
             sched: SCHEDULE_LEGACY,
             opts: SearchOpts::default(),
+            value_model: None,
             cfg,
         };
         let (asgn, score) = run_sa_tagged(run);

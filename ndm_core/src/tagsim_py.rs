@@ -10,7 +10,8 @@ use crate::tagsim::{
     group_bit_from_str, group_bits_to_strs, run_sa_tagged as run_core,
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
-    CoreSpecIn, Implicit, Phase2, SaSchedule, SearchOpts, SlotCard, Strata,
+    CoreSpecIn, Curve, Implicit, Phase2, SaSchedule, SearchOpts, SlotCard, Strata, ValueChannel, ValueModel,
+    ValueTerm, MAX_VALUE_ATTRS, NO_ATTR,
     STRATA_DEAD, STRATA_DELUXE, STRATA_GREED, TagAxis, TagRule,
     TagRun, TagSimConfig, COLOR_NONE, SCHEDULE_LEGACY,
 };
@@ -140,14 +141,64 @@ fn build_run<'a>(
     seed: Option<u64>,
     sched: SaSchedule,
     opts: SearchOpts,
+    value_model: Option<ValueModel>,
     cfg: TagSimConfig,
 ) -> TagRun<'a> {
     TagRun {
         slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, stacks, tag_rules, blanket_groups,
         assignable_groups, legal_combos, implicits, cores, min_stat_placed,
-        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, opts, cfg,
+        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, opts, value_model, cfg,
     }
+}
+
+type PyCurve = (f64, f64, Vec<f64>);
+type PyValueModel = (Vec<f64>, Vec<i64>, usize, Vec<(f64, Vec<(f64, Vec<PyCurve>)>, Vec<PyCurve>)>);
+
+/// `(per-stack value, per-stack attribute index or -1, attribute count,
+/// terms: (weight, channels: (base, per-attribute (x0, dx, ys)), per-attribute extra curves))`.
+/// An empty `ys` is a zero curve; an empty extra list means no extras.
+fn parse_value_model(vm: &Option<PyValueModel>, n_stacks: usize) -> PyResult<Option<ValueModel>> {
+    let Some((values, attrs, n_attr, terms)) = vm else { return Ok(None) };
+    let bad = |m: String| Err(pyo3::exceptions::PyValueError::new_err(m));
+    if values.len() != n_stacks || attrs.len() != n_stacks {
+        return bad(format!("value_model: {} values / {} attrs for {} stacks", values.len(), attrs.len(), n_stacks));
+    }
+    if *n_attr > MAX_VALUE_ATTRS {
+        return bad(format!("value_model: {} attributes, max {}", n_attr, MAX_VALUE_ATTRS));
+    }
+    if let Some(a) = attrs.iter().find(|&&a| a >= *n_attr as i64) {
+        return bad(format!("value_model: attribute index {} out of range", a));
+    }
+    let mut out = Vec::with_capacity(terms.len());
+    let curve = |(x0, dx, ys): &PyCurve| Curve { x0: *x0, dx: *dx, ys: ys.clone() };
+    for (weight, chans, extra) in terms {
+        if !extra.is_empty() && extra.len() != *n_attr {
+            return bad(format!("value_model: {} extra curves, want 0 or {}", extra.len(), n_attr));
+        }
+        if extra.iter().any(|(_, dx, ys)| !ys.is_empty() && !(*dx > 0.0)) {
+            return bad("value_model: a non-empty curve needs dx > 0".into());
+        }
+        let mut channels = Vec::with_capacity(chans.len());
+        for (base, curves) in chans {
+            if curves.len() != *n_attr {
+                return bad(format!("value_model: channel has {} curves, want {}", curves.len(), n_attr));
+            }
+            if curves.iter().any(|(_, dx, ys)| !ys.is_empty() && !(*dx > 0.0)) {
+                return bad("value_model: a non-empty curve needs dx > 0".into());
+            }
+            channels.push(ValueChannel {
+                base: *base,
+                curves: curves.iter().map(curve).collect(),
+            });
+        }
+        out.push(ValueTerm { weight: *weight, channels, extra: extra.iter().map(curve).collect() });
+    }
+    Ok(Some(ValueModel {
+        stack_value: values.clone(),
+        stack_attr: attrs.iter().map(|&a| if a < 0 { NO_ATTR } else { a as u8 }).collect(),
+        terms: out,
+    }))
 }
 
 /// Search option flags (any of "legal_only", "polish") plus the optional
@@ -224,6 +275,7 @@ pub struct TaggedJob {
     seed: Option<u64>,
     sched: SaSchedule,
     opts: SearchOpts,
+    value_model: Option<ValueModel>,
     cfg: TagSimConfig,
 }
 
@@ -236,7 +288,7 @@ impl TaggedJob {
             self.tag_rules.clone(), self.blanket_groups, self.assignable_groups,
             self.legal_combos.clone(), self.implicits.clone(), self.cores.clone(),
             self.min_stat_placed, self.final_pass_nonfoil_evo, self.exact_groups,
-            self.n_iter, self.restarts, self.seed, self.sched, self.opts, self.cfg,
+            self.n_iter, self.restarts, self.seed, self.sched, self.opts, self.value_model.clone(), self.cfg,
         ))
     }
 }
@@ -263,7 +315,7 @@ fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny, auto_place_arcane,
     colors_real, complex_cards, wv_foil_rules, floor_counts_deluxe,
-    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, strata = None, defer = false,
+    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, strata = None, value_model = None, defer = false,
 ))]
 pub fn run_sa_tagged(
     py: Python<'_>,
@@ -313,6 +365,7 @@ pub fn run_sa_tagged(
     search_opts: Option<Vec<String>>,
     phase2: Option<(usize, usize, String, Vec<f64>)>,
     strata: Option<(Vec<String>, u8, usize)>,
+    value_model: Option<PyValueModel>,
     defer: bool,
 ) -> PyResult<PyObject> {
     let cfg = TagSimConfig {
@@ -343,6 +396,7 @@ pub fn run_sa_tagged(
         n_iter, restarts, seed,
         sched: parse_schedule(&schedule)?,
         opts: parse_search_opts(&search_opts, &phase2, &strata)?,
+        value_model: parse_value_model(&value_model, stacks.len())?,
         cfg,
     };
     if defer {
@@ -362,7 +416,7 @@ pub fn run_sa_tagged(
     mult_deluxe_flat, mult_deluxe_core_base, mult_deluxe_core_scale,
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny,
-    colors_real, complex_cards, wv_foil_rules,
+    colors_real, complex_cards, wv_foil_rules, value_model = None, stack_index = None,
 ))]
 pub fn score_tagged(
     slots: Vec<(i32, i32)>,
@@ -395,6 +449,8 @@ pub fn score_tagged(
     colors_real: bool,
     complex_cards: bool,
     wv_foil_rules: bool,
+    value_model: Option<PyValueModel>,
+    stack_index: Option<Vec<u16>>,
 ) -> PyResult<f64> {
     let cfg = TagSimConfig {
         mult_dir_vert, mult_dir_horiz, mult_pure_base, mult_pure_scale,
@@ -415,8 +471,22 @@ pub fn score_tagged(
         &slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, Vec::new(), Vec::new(), 0, 0, Vec::new(),
         parse_implicits(&implicits), cores_in, 0, false, true, 0, 1, None,
-        SCHEDULE_LEGACY, SearchOpts::default(), cfg,
+        SCHEDULE_LEGACY, SearchOpts::default(), None, cfg,
     );
+    let mut asgn = placed_from_py(&assignment);
+    let run = match &value_model {
+        Some(vm) => {
+            let Some(idx) = &stack_index else {
+                return Err(pyo3::exceptions::PyValueError::new_err("score_tagged: value_model needs stack_index"));
+            };
+            if idx.len() != asgn.len() {
+                return Err(pyo3::exceptions::PyValueError::new_err("score_tagged: stack_index length != assignment"));
+            }
+            for (c, &i) in asgn.iter_mut().zip(idx) { c.stack = i; }
+            TagRun { value_model: parse_value_model(&Some(vm.clone()), vm.0.len())?, ..run }
+        }
+        None => run,
+    };
 
-    Ok(score_core(&run, &placed_from_py(&assignment)))
+    Ok(score_core(&run, &asgn))
 }

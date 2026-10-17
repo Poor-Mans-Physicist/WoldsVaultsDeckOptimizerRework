@@ -63,6 +63,9 @@ greed:
 # pull; flat cores store the whole multiplier (game value + 1), scaling cores
 # store the per-unit increment. The web UI converts to/from % for display.
 cores:
+  # Tag cores (Arsenal/Aegis/Tool/Natural/Fae): +value to cards carrying the core's group. Archetype
+  # mode only (src/archetype.py); greater-tier max roll.
+  tag_core: 1.25
   pure_base:   1.0
   pure_scale:  0.07   # greater pure 0.05–0.07 /non-foil card
   # Equilibrium stores the PER-COLOR roll (StatEfficiencyDeckModifier,
