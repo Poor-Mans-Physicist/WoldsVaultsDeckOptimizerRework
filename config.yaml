@@ -248,3 +248,40 @@ modes:
       json_file: vh_decks.json
     cards:
       json_file: vh_modifiers.json
+
+# Deck and core rework (test/core-rework, src/rework.py). Greater-tier maximum rolls. Additive cores add to the
+# card's core sum; void / empyreal / arsenal / aegis / tool / pluto multiply (self-additive inside, product across).
+# Per-card units: pure / premium per counted card, equilibrium per color, void per empty slot, archive (1+v)^n - 1,
+# aegis per orthogonal Defensive neighbour, tool per other Utility card, talent per surrounding Knack card,
+# greed per greed card when 2+ greed cards target the same card.
+rework:
+  greed_addend: 1.25        # Elite greed max roll (+125%)
+  mystery_scale: 0.75       # Mystery decks inherit modifiers at 75% strength
+  runic_tag: 0.2            # Runic: x(1 + 0.2 per shared tag, color counts) when mirrored cards share a color
+  shadow_void: 0.04         # Shadow: built-in void core, x(1 + 0.04 per empty slot)
+  villager_nitwit: 3.0      # Villager: +300% on Arcane slots (built-in Nitwit)
+  empyreal_slots: 3
+  cores:
+    pure: 0.05
+    equilibrium: 0.36
+    steadfast: 1.1
+    shiny: 0.9
+    color: 0.6
+    premium: 0.25
+    void: 0.08
+    archive: 0.225
+    empyreal: 0.4
+    arsenal: 0.5
+    aegis: 0.175
+    tool: 0.08
+    natural: 1.4
+    fae: 1.4
+    jupiter: 0.85
+    pluto: 0.6
+    nitwit: 3.0
+    bazaar: 0.8
+    talent: 0.8
+    temporal: 2.0
+    greed: 0.25
+  pool: [pure, equilibrium, steadfast, shiny, color, premium, void, archive, empyreal, arsenal, aegis, tool,
+         natural, fae, jupiter, pluto, nitwit, bazaar, talent, temporal, greed]

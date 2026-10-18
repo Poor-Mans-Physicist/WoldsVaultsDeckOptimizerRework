@@ -6,7 +6,7 @@
 
 use pyo3::prelude::*;
 
-use crate::tagsim::{
+use crate::tagsim::{Rework, RwCore, rw_core_from_str,
     group_bit_from_str, group_bits_to_strs, run_sa_tagged as run_core,
     score_tagged as score_core, tag_card_type_from_str, tag_card_type_to_str,
     tag_color_from_str, tag_color_to_str, tag_core_from_str, CardSpec,
@@ -142,14 +142,31 @@ fn build_run<'a>(
     sched: SaSchedule,
     opts: SearchOpts,
     value_model: Option<ValueModel>,
+    rework: Option<Rework>,
     cfg: TagSimConfig,
 ) -> TagRun<'a> {
     TagRun {
         slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, stacks, tag_rules, blanket_groups,
         assignable_groups, legal_combos, implicits, cores, min_stat_placed,
-        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, opts, value_model, cfg,
+        final_pass_nonfoil_evo, exact_groups, n_iter, restarts, seed, sched, opts, value_model, rework, cfg,
     }
+}
+
+/// `(cores: (name, value, k, color), nitwit slot indices, nitwit bonus)` for the core-rework scoring path.
+type PyRework = (Vec<(String, f64, usize, String)>, Vec<usize>, f64);
+
+fn parse_rework(rw: &Option<PyRework>, slots: &[(i32, i32)]) -> Option<Rework> {
+    rw.as_ref().map(|(cores, nitwit, nitwit_value)| Rework {
+        cores: cores.iter().map(|(name, value, k, color)| RwCore {
+            kind: rw_core_from_str(name),
+            value: *value,
+            k: *k,
+            color: if color.is_empty() { COLOR_NONE } else { tag_color_from_str(color) },
+        }).collect(),
+        nitwit_value: *nitwit_value,
+        ..Default::default()
+    }.prepare(slots, nitwit))
 }
 
 type PyCurve = (f64, f64, Vec<f64>);
@@ -276,6 +293,7 @@ pub struct TaggedJob {
     sched: SaSchedule,
     opts: SearchOpts,
     value_model: Option<ValueModel>,
+    rework: Option<Rework>,
     cfg: TagSimConfig,
 }
 
@@ -288,7 +306,7 @@ impl TaggedJob {
             self.tag_rules.clone(), self.blanket_groups, self.assignable_groups,
             self.legal_combos.clone(), self.implicits.clone(), self.cores.clone(),
             self.min_stat_placed, self.final_pass_nonfoil_evo, self.exact_groups,
-            self.n_iter, self.restarts, self.seed, self.sched, self.opts, self.value_model.clone(), self.cfg,
+            self.n_iter, self.restarts, self.seed, self.sched, self.opts, self.value_model.clone(), self.rework.clone(), self.cfg,
         ))
     }
 }
@@ -315,7 +333,7 @@ fn parse_combo_masks(combos: &Option<Vec<Vec<String>>>) -> Vec<u16> {
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny, auto_place_arcane,
     colors_real, complex_cards, wv_foil_rules, floor_counts_deluxe,
-    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, strata = None, value_model = None, defer = false,
+    seed = None, legal_combos = None, schedule = None, search_opts = None, phase2 = None, strata = None, value_model = None, rework = None, defer = false,
 ))]
 pub fn run_sa_tagged(
     py: Python<'_>,
@@ -366,6 +384,7 @@ pub fn run_sa_tagged(
     phase2: Option<(usize, usize, String, Vec<f64>)>,
     strata: Option<(Vec<String>, u8, usize)>,
     value_model: Option<PyValueModel>,
+    rework: Option<PyRework>,
     defer: bool,
 ) -> PyResult<PyObject> {
     let cfg = TagSimConfig {
@@ -383,6 +402,7 @@ pub fn run_sa_tagged(
         override_: *o,
     }).collect();
 
+    let rework_in = parse_rework(&rework, &slots);
     let job = TaggedJob {
         slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices,
@@ -397,6 +417,7 @@ pub fn run_sa_tagged(
         sched: parse_schedule(&schedule)?,
         opts: parse_search_opts(&search_opts, &phase2, &strata)?,
         value_model: parse_value_model(&value_model, stacks.len())?,
+        rework: rework_in,
         cfg,
     };
     if defer {
@@ -416,7 +437,7 @@ pub fn run_sa_tagged(
     mult_deluxe_flat, mult_deluxe_core_base, mult_deluxe_core_scale,
     mult_void_core_base, mult_void_core_scale, mult_archive_core,
     greed_additive, additive_cores, is_shiny,
-    colors_real, complex_cards, wv_foil_rules, value_model = None, stack_index = None,
+    colors_real, complex_cards, wv_foil_rules, value_model = None, stack_index = None, rework = None,
 ))]
 pub fn score_tagged(
     slots: Vec<(i32, i32)>,
@@ -451,6 +472,7 @@ pub fn score_tagged(
     wv_foil_rules: bool,
     value_model: Option<PyValueModel>,
     stack_index: Option<Vec<u16>>,
+    rework: Option<PyRework>,
 ) -> PyResult<f64> {
     let cfg = TagSimConfig {
         mult_dir_vert, mult_dir_horiz, mult_pure_base, mult_pure_scale,
@@ -471,7 +493,7 @@ pub fn score_tagged(
         &slots, row_peers, col_peers, surr_peers, diag_peers,
         arcane_slot_indices, Vec::new(), Vec::new(), 0, 0, Vec::new(),
         parse_implicits(&implicits), cores_in, 0, false, true, 0, 1, None,
-        SCHEDULE_LEGACY, SearchOpts::default(), None, cfg,
+        SCHEDULE_LEGACY, SearchOpts::default(), None, parse_rework(&rework, &slots), cfg,
     );
     let mut asgn = placed_from_py(&assignment);
     let run = match &value_model {

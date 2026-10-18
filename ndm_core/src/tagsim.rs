@@ -406,6 +406,8 @@ pub struct TagRun<'a> {
     pub sched: SaSchedule,
     pub opts: SearchOpts,
     pub value_model: Option<ValueModel>,
+    /// Core rework scoring (test/core-rework); None keeps the live model.
+    pub rework: Option<Rework>,
     pub cfg: TagSimConfig,
 }
 
@@ -586,6 +588,7 @@ struct Cores {
     has_color_core: bool,
     foil_active: bool,
     vm: Option<ValueModel>,
+    rw: Option<Rework>,
 }
 
 impl Cores {
@@ -600,7 +603,7 @@ impl Cores {
                 _ => {}
             }
         }
-        Cores { list: specs.to_vec(), color_core_color, has_color_core, foil_active, vm: None }
+        Cores { list: specs.to_vec(), color_core_color, has_color_core, foil_active, vm: None, rw: None }
     }
 }
 
@@ -1276,6 +1279,9 @@ fn simulate(
     cfg: &TagSimConfig,
     s: &mut Scratch,
 ) -> f64 {
+    if let Some(rw) = &cores.rw {
+        return simulate_rework(geom, asgn, cores, rw, implicits, cfg, s);
+    }
     let n = geom.n;
     s.counts.rebuild(geom, asgn);
     let der = derive_scalars(cores, implicits, cfg, &s.counts);
@@ -2200,6 +2206,7 @@ impl<'a> Walk<'a> {
         // decks pay more in bookkeeping than a full pass costs; both keep the
         // plain simulate() path.
         let use_delta = geom.n >= DELTA_MIN_SLOTS
+            && cores.rw.is_none()
             && !run.implicits.iter().any(|imp| matches!(imp, Implicit::Chain { .. }));
         let deval = if use_delta {
             let d = DeltaEval::new(geom, &asgn, cores, &run.implicits, cfg);
@@ -2617,6 +2624,7 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
     let geom = build_geom(&run);
     let mut cores = Cores::build(&run.cores);
     cores.vm = run.value_model.clone();
+    cores.rw = run.rework.clone();
 
     // Foil ban (Targeted foil max = 0) suppresses the run-level foil bit.
     let foil_banned = run.tag_rules.iter().any(|r|
@@ -2696,8 +2704,464 @@ pub fn score_tagged(run: &TagRun<'_>, asgn: &[SlotCard]) -> f64 {
     let geom = build_geom(run);
     let mut cores = Cores::build(&run.cores);
     cores.vm = run.value_model.clone();
+    cores.rw = run.rework.clone();
     let mut s = Scratch::new(&geom);
     simulate(&geom, asgn, &cores, &run.implicits, &run.cfg, &mut s)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core rework (test/core-rework) — a separate full-recompute scoring path
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Active when the run carries a `Rework`. Per scorable card:
+//   term = base × (1 + Σ additive) × Π multiplicative × greed boost
+// Additive: pure, equilibrium, steadfast, shiny, color, premium, archive,
+// natural, fae, jupiter, nitwit, bazaar, talent, temporal + additive implicits.
+// Multiplicative (each self-additive inside, product across): void (+ shadow),
+// empyreal (best k slots), arsenal, aegis, tool, pluto, runic.
+// Greed core: a greed card whose target has >= 2 greed sources adds +r to its
+// own addend. No delta evaluation: Walk keeps the full simulate() path.
+
+pub const RW_PURE: u8 = 0;
+pub const RW_EQUILIBRIUM: u8 = 1;
+pub const RW_STEADFAST: u8 = 2;
+pub const RW_SHINY: u8 = 3;
+pub const RW_COLOR: u8 = 4;
+pub const RW_PREMIUM: u8 = 5;
+pub const RW_VOID: u8 = 6;
+pub const RW_ARCHIVE: u8 = 7;
+pub const RW_EMPYREAL: u8 = 8;
+pub const RW_ARSENAL: u8 = 9;
+pub const RW_AEGIS: u8 = 10;
+pub const RW_TOOL: u8 = 11;
+pub const RW_NATURAL: u8 = 12;
+pub const RW_FAE: u8 = 13;
+pub const RW_JUPITER: u8 = 14;
+pub const RW_PLUTO: u8 = 15;
+pub const RW_BAZAAR: u8 = 16;
+pub const RW_TALENT: u8 = 17;
+pub const RW_TEMPORAL: u8 = 18;
+pub const RW_GREED: u8 = 19;
+
+pub fn rw_core_from_str(s: &str) -> u8 {
+    match s {
+        "pure" => RW_PURE, "equilibrium" => RW_EQUILIBRIUM, "steadfast" => RW_STEADFAST,
+        "shiny" => RW_SHINY, "color" => RW_COLOR, "premium" => RW_PREMIUM, "void" => RW_VOID,
+        "archive" => RW_ARCHIVE, "empyreal" => RW_EMPYREAL, "arsenal" => RW_ARSENAL,
+        "aegis" => RW_AEGIS, "tool" => RW_TOOL, "natural" => RW_NATURAL, "fae" => RW_FAE,
+        "jupiter" => RW_JUPITER, "pluto" => RW_PLUTO, "bazaar" => RW_BAZAAR,
+        "talent" => RW_TALENT, "temporal" => RW_TEMPORAL, "greed" => RW_GREED,
+        other => panic!("tagsim: unknown rework core: {}", other),
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RwCore {
+    pub kind: u8,
+    pub value: f64,
+    /// Empyreal slot count; unused otherwise.
+    pub k: usize,
+    /// Color core's color; COLOR_NONE otherwise.
+    pub color: u8,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Rework {
+    pub cores: Vec<RwCore>,
+    /// Per slot: Nitwit / Villager bonus slot (an Arcane slot that takes regular cards).
+    pub nitwit_slots: Vec<bool>,
+    pub nitwit_value: f64,
+    /// Per slot: the 12-cell star-cross (orthogonal +-1/+-2 and diagonals) used by the Temporal core.
+    pub starcross: Vec<Vec<usize>>,
+}
+
+impl Rework {
+    /// Fill the slot-geometry tables from the run's slot list.
+    pub fn prepare(mut self, slots: &[(i32, i32)], nitwit: &[usize]) -> Self {
+        let map: HashMap<(i32, i32), usize> = slots.iter().enumerate().map(|(i, &p)| (p, i)).collect();
+        const OFFS: [(i32, i32); 12] = [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2),
+                                        (-1, -1), (-1, 1), (1, -1), (1, 1)];
+        self.starcross = slots.iter().map(|&(r, c)| {
+            OFFS.iter().filter_map(|&(dr, dc)| map.get(&(r + dr, c + dc)).copied()).collect()
+        }).collect();
+        self.nitwit_slots = vec![false; slots.len()];
+        for &i in nitwit { if i < slots.len() { self.nitwit_slots[i] = true; } }
+        self
+    }
+}
+
+// Extended group bits (u32): the kernel's 11 card groups plus groups the game derives from the card type.
+const XG_EVOLUTION: u32 = 1 << 11;
+const XG_DELUXE: u32 = 1 << 12;
+const XG_ARCANE: u32 = 1 << 13;
+const XG_GREED: u32 = 1 << 14;
+const XG_SHINY: u32 = 1 << 15;
+const XG_STAT: u32 = G_STAT as u32;
+const N_XG: usize = 16;
+/// Groups in alphabetical order of their game names (dominance tie-break: first wins).
+const XG_ALPHA: [u32; N_XG] = [
+    XG_ARCANE, G_DEFENSIVE as u32, XG_DELUXE, G_ESSENCE as u32, XG_EVOLUTION, G_FOIL as u32, XG_GREED,
+    G_KNACK as u32, G_MAGICAL as u32, G_OFFENSIVE as u32, G_PHYSICAL as u32, G_RESOURCE as u32, XG_SHINY,
+    XG_STAT, G_TEMPORAL as u32, G_UTILITY as u32,
+];
+/// Non-stat cards: they fill a slot and feed adjacency/dominance but score 0 themselves.
+const XG_NONSTAT: u32 = (G_RESOURCE | G_TEMPORAL | G_KNACK) as u32;
+
+#[inline(always)]
+fn xgroups(c: &SlotCard, cfg: &TagSimConfig) -> u32 {
+    if c.t == T_DEAD { return 0; }
+    let mut m = c.groups as u32;
+    if is_positional(c.t) {
+        m |= if cfg.is_shiny { XG_SHINY | XG_STAT } else { XG_EVOLUTION };
+    } else if c.t == T_DELUXE {
+        m |= XG_DELUXE | XG_STAT;
+    } else if c.t == T_TYPELESS {
+        m |= XG_STAT;
+    } else if is_greed(c.t) {
+        m |= XG_GREED;
+    } else if c.t == T_ARCANE {
+        m |= XG_ARCANE;
+    }
+    m
+}
+
+fn dominant_group(counts: &[u32; N_XG], most: bool, exclude: u32) -> u32 {
+    let mut best: Option<(u32, u32)> = None;
+    for &bit in XG_ALPHA.iter() {
+        if bit & exclude != 0 { continue; }
+        let n = counts[bit.trailing_zeros() as usize];
+        if n == 0 { continue; }
+        let better = match best {
+            None => true,
+            Some((_, bn)) => if most { n > bn } else { n < bn },
+        };
+        if better { best = Some((bit, n)); }
+    }
+    best.map(|b| b.0).unwrap_or(0)
+}
+
+fn simulate_rework(
+    geom: &Geom,
+    asgn: &[SlotCard],
+    cores: &Cores,
+    rw: &Rework,
+    implicits: &[Implicit],
+    cfg: &TagSimConfig,
+    s: &mut Scratch,
+) -> f64 {
+    let n = geom.n;
+    s.counts.rebuild(geom, asgn);
+    let xg: Vec<u32> = asgn.iter().map(|c| xgroups(c, cfg)).collect();
+
+    let mut gcount = [0u32; N_XG];
+    let mut n_empty = 0u32;
+    let mut n_nonfoil = 0u32;
+    let mut n_deluxe = 0u32;
+    let mut n_arcane = 0u32;
+    let mut n_util = 0u32;
+    let mut color_seen = [false; N_COLORS];
+    for (i, c) in asgn.iter().enumerate() {
+        if c.t == T_DEAD { n_empty += 1; continue; }
+        let m = xg[i];
+        for b in 0..N_XG { if m & (1 << b) != 0 { gcount[b] += 1; } }
+        if m & G_FOIL as u32 == 0 { n_nonfoil += 1; }
+        if c.t == T_DELUXE { n_deluxe += 1; }
+        if c.t == T_ARCANE { n_arcane += 1; }
+        if m & G_UTILITY as u32 != 0 { n_util += 1; }
+        if c.color != COLOR_NONE { color_seen[c.color as usize] = true; }
+    }
+    let n_colors = color_seen.iter().filter(|&&b| b).count() as f64;
+
+    // Deck-global core pieces.
+    let mut add_all = 0.0f64;              // additive bonus every scorable card gets
+    let mut void_rate = 0.0f64;
+    let mut jupiter = (0u32, 0.0f64);
+    let mut pluto = (0u32, 0.0f64);
+    let mut greed_core = 0.0f64;
+    let mut empyreal: Option<(f64, usize)> = None;
+    for core in &rw.cores {
+        match core.kind {
+            RW_PREMIUM => add_all += core.value * n_deluxe as f64,
+            RW_ARCHIVE => add_all += (1.0 + core.value).powf(n_arcane as f64) - 1.0,
+            RW_VOID => void_rate += core.value,
+            RW_JUPITER => jupiter = (dominant_group(&gcount, true, XG_STAT), core.value),
+            RW_PLUTO => pluto = (dominant_group(&gcount, false, 0), core.value),
+            RW_GREED => greed_core += core.value,
+            RW_EMPYREAL => empyreal = Some((core.value, core.k)),
+            _ => {}
+        }
+    }
+    let mut freq_mult = [1.0f64; 4];
+    let mut mirror_tag = 0.0f64;
+    let mut have_mirror = false;
+    let mut have_chain = false;
+    let mut chain_value = 0.0f64;
+    let mut unique_value = 0.0f64;
+    for imp in implicits {
+        match *imp {
+            Implicit::Freq { mult, ptype } => freq_mult[ptype as usize] *= mult.max(1.0),
+            Implicit::Mirror { value } => { mirror_tag = value; have_mirror = true; }
+            Implicit::EmptySlots { value } => void_rate += value,
+            Implicit::Chain { value } => { chain_value = value; have_chain = true; }
+            Implicit::UniqueGroups { value } => unique_value = value,
+            _ => {}
+        }
+    }
+    if have_chain {
+        chain_flood_fill(geom, asgn, cfg, &mut s.chain_id, &mut s.chain_size, &mut s.chain_stack);
+    }
+    let unique_groups = if unique_value > 0.0 {
+        (0..N_XG).filter(|&b| gcount[b] > 0).count() as f64
+    } else { 0.0 };
+    let void_factor = 1.0 + void_rate * n_empty as f64;
+
+    // Greed boosts with the greed core's stacking bonus.
+    let mut nsrc = vec![0u32; n];
+    for i in 0..n {
+        if !is_greed(asgn[i].t) { continue; }
+        if let (Some(j), _) = greed_target(geom, i, asgn[i].t, cfg) {
+            if is_scorable(asgn[j].t) { nsrc[j] += 1; }
+        }
+    }
+    for v in s.boost[..n].iter_mut() { *v = 1.0; }
+    for i in 0..n {
+        if !is_greed(asgn[i].t) { continue; }
+        let (target, amount) = greed_target(geom, i, asgn[i].t, cfg);
+        if let Some(j) = target {
+            if is_scorable(asgn[j].t) {
+                s.boost[j] += amount + if nsrc[j] >= 2 { greed_core } else { 0.0 };
+            }
+        }
+    }
+
+    let mut terms = vec![0.0f64; n];
+    for i in 0..n {
+        let c = asgn[i];
+        if !is_scorable(c.t) { continue; }
+        let m = xg[i];
+        if m & XG_NONSTAT != 0 { continue; }
+
+        let base = if is_positional(c.t) {
+            let raw = match c.t {
+                T_ROW => {
+                    let r = (geom.row_of[i] - geom.row_min) as usize;
+                    if cfg.colors_real { s.counts.row_color[r * N_COLORS + c.color as usize] as f64 }
+                    else { s.counts.row_fill[r] as f64 }
+                }
+                T_COL => {
+                    let cc = (geom.col_of[i] - geom.col_min) as usize;
+                    if cfg.colors_real { s.counts.col_color[cc * N_COLORS + c.color as usize] as f64 }
+                    else { s.counts.col_fill[cc] as f64 }
+                }
+                _ => {
+                    let peers = if c.t == T_DIAG { &geom.diag_peers[i] } else { &geom.surr_peers[i] };
+                    peers.iter().filter(|&&q| {
+                        let qc = asgn[q];
+                        qc.t != T_DEAD && (!cfg.colors_real || qc.t == T_WILD || qc.color == c.color)
+                    }).count() as f64
+                }
+            };
+            let scaled = raw * freq_mult[c.t as usize];
+            if c.t == T_DIAG { scaled.max(1.0) } else { scaled }
+        } else if c.t == T_DELUXE {
+            cfg.mult_deluxe_flat
+        } else {
+            1.0
+        };
+
+        let has = |bit: u32| m & bit != 0;
+        let count_peers = |peers: &[usize], bit: u32| -> u32 {
+            peers.iter().filter(|&&q| asgn[q].t != T_DEAD && xg[q] & bit != 0).count() as u32
+        };
+
+        let mut add = add_all;
+        let mut mult = void_factor;
+        for core in &rw.cores {
+            let v = core.value;
+            match core.kind {
+                RW_PURE => if has(XG_STAT | XG_EVOLUTION) { add += v * n_nonfoil as f64; },
+                RW_EQUILIBRIUM => if has(XG_STAT) { add += v * n_colors; },
+                RW_STEADFAST => if has(XG_STAT) { add += v; },
+                RW_SHINY => if has(G_FOIL as u32) { add += v; },
+                RW_COLOR => if core.color == COLOR_NONE || c.color == core.color { add += v; },
+                RW_NATURAL => if has(G_PHYSICAL as u32) { add += v; },
+                RW_FAE => if has(G_MAGICAL as u32) { add += v; },
+                RW_BAZAAR => if count_peers(&geom.surr_peers[i], G_RESOURCE as u32) > 0 { add += v; },
+                RW_TALENT => add += v * count_peers(&geom.surr_peers[i], G_KNACK as u32) as f64,
+                RW_TEMPORAL => if count_peers(&rw.starcross[i], G_TEMPORAL as u32) > 0 { add += v; },
+                RW_ARSENAL => if has(G_OFFENSIVE as u32) { mult *= 1.0 + v; },
+                RW_AEGIS => if has(G_DEFENSIVE as u32) {
+                    let k = geom.orth_sorted[i].iter()
+                        .filter(|&&q| asgn[q].t != T_DEAD && xg[q] & G_DEFENSIVE as u32 != 0).count();
+                    mult *= 1.0 + v * k as f64;
+                },
+                RW_TOOL => if has(G_UTILITY as u32) { mult *= 1.0 + v * (n_util.saturating_sub(1)) as f64; },
+                _ => {}
+            }
+        }
+        if jupiter.0 != 0 && has(jupiter.0) { add += jupiter.1; }
+        if pluto.0 != 0 && has(pluto.0) { mult *= 1.0 + pluto.1; }
+        if rw.nitwit_slots.get(i).copied().unwrap_or(false) { add += rw.nitwit_value; }
+
+        for imp in implicits {
+            match *imp {
+                Implicit::GlobalFlat { value, groups, colors } => {
+                    let group_ok = c.groups & groups == groups;
+                    let color_ok = colors == 0 || (c.color != COLOR_NONE && colors & (1 << c.color) != 0);
+                    if group_ok && color_ok { add += value; }
+                }
+                Implicit::Adjacency { value, group, surrounding } => {
+                    let peers = if surrounding { &geom.surr_peers[i] } else { &geom.col_peers[i] };
+                    let k = peers.iter().filter(|&&q| {
+                        let qc = asgn[q];
+                        qc.t != T_DEAD && !is_greed(qc.t) && (qc.t == T_WILD || qc.groups & group != 0)
+                    }).count();
+                    add += value * k as f64;
+                }
+                Implicit::ColorMismatch { value } => {
+                    let k = geom.orth_sorted[i].iter().filter(|&&q| {
+                        let qc = asgn[q];
+                        qc.t != T_DEAD && (qc.t == T_WILD || (qc.color != COLOR_NONE && qc.color != c.color))
+                    }).count();
+                    add += value * k as f64;
+                }
+                Implicit::RowPos { value } => add += value * geom.rows_from_bottom[i],
+                Implicit::Chain { .. } => {
+                    let id = s.chain_id[i] as usize;
+                    if id != 0 { add += chain_value * (s.chain_size[id] - 1) as f64; }
+                }
+                Implicit::UniqueGroups { .. } => if has(XG_STAT) { add += unique_value * unique_groups; },
+                _ => {}
+            }
+        }
+
+        if have_mirror {
+            let shared = if geom.mirror_self[i] {
+                Some(m.count_ones() + 1)
+            } else if let Some(mi) = geom.mirror_of[i] {
+                let mc = asgn[mi];
+                if mc.t == T_DEAD || is_greed(mc.t) || mc.color == COLOR_NONE || mc.color != c.color { None }
+                else { Some((m & xg[mi]).count_ones() + 1) }
+            } else { None };
+            if let Some(k) = shared { mult *= 1.0 + mirror_tag * k as f64; }
+        }
+
+        terms[i] = base * (1.0 + add) * mult * s.boost[i];
+    }
+
+    if let Some((v, k)) = empyreal {
+        let mut idx: Vec<usize> = (0..n)
+            .filter(|&i| terms[i] > 0.0 && xg[i] & (XG_STAT | XG_EVOLUTION) != 0)
+            .collect();
+        idx.sort_by(|&a, &b| terms[b].total_cmp(&terms[a]).then(a.cmp(&b)));
+        for &i in idx.iter().take(k) { terms[i] *= 1.0 + v; }
+    }
+
+    if let Some(vm) = &cores.vm {
+        let mut x = [0.0f64; MAX_VALUE_ATTRS];
+        for i in 0..n {
+            if terms[i] == 0.0 { continue; }
+            if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += terms[i] * v; }
+        }
+        return vm.score(&x);
+    }
+    terms.iter().sum()
+}
+
+#[cfg(test)]
+mod rework_tests {
+    use super::*;
+
+    fn cfg() -> TagSimConfig {
+        TagSimConfig {
+            mult_dir_vert: 1.25, mult_dir_horiz: 1.25, mult_pure_base: 1.0, mult_pure_scale: 0.0,
+            mult_equilibrium: 0.0, mult_foil: 1.0, mult_steadfast: 1.0, mult_sparkling: 1.0, mult_color: 1.0,
+            mult_deluxe_flat: 2.0, mult_deluxe_core_base: 1.0, mult_deluxe_core_scale: 0.0,
+            mult_void_core_base: 1.0, mult_void_core_scale: 0.0, mult_archive_core: 1.0,
+            greed_additive: true, additive_cores: true, is_shiny: false, auto_place_arcane: false,
+            colors_real: true, complex: false, wv_foil_rules: true, floor_counts_deluxe: false,
+        }
+    }
+
+    fn card(t: u8, groups: u16) -> SlotCard { SlotCard { t, color: RED, scale: RED, groups, stack: 0 } }
+
+    fn score(slots: &[(i32, i32)], asgn: &[SlotCard], rw: Rework, imps: Vec<Implicit>) -> f64 {
+        let n = slots.len();
+        let mut row = vec![Vec::new(); n];
+        let mut col = vec![Vec::new(); n];
+        let mut surr = vec![Vec::new(); n];
+        let mut diag = vec![Vec::new(); n];
+        for i in 0..n {
+            for j in 0..n {
+                if i == j { continue; }
+                let (a, b) = (slots[i], slots[j]);
+                if a.0 == b.0 { row[i].push(j); }
+                if a.1 == b.1 { col[i].push(j); }
+                if (a.0 - b.0).abs() <= 1 && (a.1 - b.1).abs() <= 1 { surr[i].push(j); }
+                if (a.0 - b.0).abs() == (a.1 - b.1).abs() { diag[i].push(j); }
+            }
+        }
+        let run = TagRun {
+            slots, row_peers: row, col_peers: col, surr_peers: surr, diag_peers: diag,
+            arcane_slot_indices: Vec::new(), stacks: Vec::new(), tag_rules: Vec::new(),
+            blanket_groups: 0, assignable_groups: 0, legal_combos: Vec::new(), implicits: imps,
+            cores: Vec::new(), min_stat_placed: 0, final_pass_nonfoil_evo: false, exact_groups: true,
+            n_iter: 0, restarts: 1, seed: None, sched: SCHEDULE_LEGACY, opts: SearchOpts::default(),
+            value_model: None, rework: Some(rw.prepare(slots, &[])), cfg: cfg(),
+        };
+        score_tagged(&run, asgn)
+    }
+
+    fn rw(cores: &[(u8, f64, usize)]) -> Rework {
+        Rework { cores: cores.iter().map(|&(kind, value, k)| RwCore { kind, value, k, color: COLOR_NONE }).collect(),
+                 ..Default::default() }
+    }
+
+    #[test]
+    fn hand_checked_terms() {
+        // One row: typeless(Def) | typeless(Def) | dead | typeless(Off)
+        let slots = [(0, 0), (0, 1), (0, 2), (0, 3)];
+        let a = [card(T_TYPELESS, G_DEFENSIVE), card(T_TYPELESS, G_DEFENSIVE), DEAD_CARD, card(T_TYPELESS, G_OFFENSIVE)];
+        // No cores: 3 typeless cards = 3.
+        assert!((score(&slots, &a, rw(&[]), vec![]) - 3.0).abs() < 1e-12);
+        // Void 0.08 per empty: x1.08 on every card.
+        assert!((score(&slots, &a, rw(&[(RW_VOID, 0.08, 0)]), vec![]) - 3.0 * 1.08).abs() < 1e-12);
+        // Aegis 0.175: each Defensive card has 1 Defensive orthogonal neighbour.
+        assert!((score(&slots, &a, rw(&[(RW_AEGIS, 0.175, 0)]), vec![]) - (2.0 * 1.175 + 1.0)).abs() < 1e-12);
+        // Arsenal x1.5 on the Offensive card, Void on top: product.
+        let v = score(&slots, &a, rw(&[(RW_ARSENAL, 0.5, 0), (RW_VOID, 0.08, 0)]), vec![]);
+        assert!((v - (2.0 * 1.08 + 1.5 * 1.08)).abs() < 1e-12);
+        // Pure 0.05 x 3 non-foil cards, Stat cards only (typeless = Stat).
+        assert!((score(&slots, &a, rw(&[(RW_PURE, 0.05, 0)]), vec![]) - 3.0 * 1.15).abs() < 1e-12);
+        // Empyreal x1.4 on best 2 slots (all equal -> first two).
+        assert!((score(&slots, &a, rw(&[(RW_EMPYREAL, 0.4, 2)]), vec![]) - (2.0 * 1.4 + 1.0)).abs() < 1e-12);
+        // Pluto x1.6 on the least common group: Offensive (1) beats Defensive (2) and Stat (3).
+        assert!((score(&slots, &a, rw(&[(RW_PLUTO, 0.6, 0)]), vec![]) - (2.0 + 1.6)).abs() < 1e-12);
+        // Jupiter +0.85 on the most common non-Stat group: Defensive.
+        assert!((score(&slots, &a, rw(&[(RW_JUPITER, 0.85, 0)]), vec![]) - (2.0 * 1.85 + 1.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn greed_core_needs_two_sources() {
+        // Column: greed-down, target typeless, greed-up.
+        let slots = [(0, 0), (1, 0), (2, 0)];
+        let a = [card(T_G_DOWN, 0), card(T_TYPELESS, 0), card(T_G_UP, 0)];
+        // 1 + 2 x (1.25 + 0.25) = 4.0
+        assert!((score(&slots, &a, rw(&[(RW_GREED, 0.25, 0)]), vec![]) - 4.0).abs() < 1e-12);
+        let b = [card(T_G_DOWN, 0), card(T_TYPELESS, 0), card(T_TYPELESS, 0)];
+        // Lone greed: 1 + 1.25 on the middle card, + 1 for the bottom card.
+        assert!((score(&slots, &b, rw(&[(RW_GREED, 0.25, 0)]), vec![]) - 3.25).abs() < 1e-12);
+    }
+
+    #[test]
+    fn runic_counts_shared_tags_and_color() {
+        // 1x3 row: left and right mirror each other; middle mirrors itself.
+        let slots = [(0, 0), (0, 1), (0, 2)];
+        let a = [card(T_TYPELESS, G_PHYSICAL), card(T_TYPELESS, G_DEFENSIVE | G_PHYSICAL), card(T_TYPELESS, G_PHYSICAL)];
+        // Sides share Physical + Stat + color = 3 -> 1.6; middle has Def, Phys, Stat + color = 4 -> 1.8.
+        let v = score(&slots, &a, rw(&[]), vec![Implicit::Mirror { value: 0.2 }]);
+        assert!((v - (2.0 * 1.6 + 1.8)).abs() < 1e-12, "{}", v);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2875,6 +3339,7 @@ mod delta_tests {
                 sched: SCHEDULE_LEGACY,
                 opts: SearchOpts::default(),
                 value_model: None,
+                rework: None,
                 cfg: cfg_v,
             };
             let geom = build_geom(&run);
@@ -2998,6 +3463,7 @@ mod delta_tests {
             sched: SCHEDULE_LEGACY,
             opts: SearchOpts::default(),
             value_model: None,
+            rework: None,
             cfg,
         };
         let (asgn, score) = run_sa_tagged(run);

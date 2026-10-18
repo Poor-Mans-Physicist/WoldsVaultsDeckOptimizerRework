@@ -231,6 +231,7 @@ pub(crate) fn build_run(inp: &TagRunInput) -> TagRun<'_> {
         sched: SCHEDULE_LEGACY,
         opts: SearchOpts::default(),
         value_model: None,
+        rework: None,
         cfg: TagSimConfig {
             mult_dir_vert: inp.mult_dir_vert,
             mult_dir_horiz: inp.mult_dir_horiz,

@@ -1022,6 +1022,7 @@ mod sa_bench {
             sched: SCHEDULE_LEGACY,
             opts: SearchOpts::default(),
             value_model: None,
+            rework: None,
             cfg: TagSimConfig {
                 mult_dir_vert: 4.0,
                 mult_dir_horiz: 4.0,
