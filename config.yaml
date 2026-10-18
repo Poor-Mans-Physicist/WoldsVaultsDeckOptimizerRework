@@ -261,13 +261,14 @@ rework:
   shadow_void: 0.04         # Shadow: built-in void core, x(1 + 0.04 per empty slot)
   villager_nitwit: 3.0      # Villager: +300% on Arcane slots (built-in Nitwit)
   empyreal_slots: 3
+  deluxe_base: 1.0          # deluxe cards give their listed value (NDM's 2x base is not a stat multiplier)
   cores:
     pure: 0.05
     equilibrium: 0.36
     steadfast: 1.1
     shiny: 0.9
     color: 0.6
-    premium: 0.25
+    premium: 0.125
     void: 0.08
     archive: 0.225
     empyreal: 0.4

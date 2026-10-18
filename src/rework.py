@@ -143,7 +143,7 @@ def job(deck: Deck, imp_keys: Sequence[str], mystery: bool, cores: Tuple[str, ..
         n_iter=n_iter, restarts=restarts,
         mult_dir_vert=GREED_ADDEND, mult_dir_horiz=GREED_ADDEND,
         mult_pure_base=1.0, mult_pure_scale=0.0, mult_equilibrium=0.0, mult_foil=1.0, mult_steadfast=1.0,
-        mult_sparkling=1.0, mult_color=1.0, mult_deluxe_flat=S.MULT_DELUXE_FLAT, mult_deluxe_core_base=1.0,
+        mult_sparkling=1.0, mult_color=1.0, mult_deluxe_flat=float(RW["deluxe_base"]), mult_deluxe_core_base=1.0,
         mult_deluxe_core_scale=0.0, mult_void_core_base=1.0, mult_void_core_scale=0.0, mult_archive_core=1.0,
         greed_additive=True, additive_cores=True, is_shiny="shiny" in cores, auto_place_arcane=True,
         colors_real=True, complex_cards=False, wv_foil_rules=True, floor_counts_deluxe=False,
