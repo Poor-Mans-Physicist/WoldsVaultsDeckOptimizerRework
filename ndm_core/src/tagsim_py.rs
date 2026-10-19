@@ -95,12 +95,16 @@ fn parse_group_list(groups: &[String]) -> u16 {
     mask
 }
 
-fn placed_to_py(asgn: &[SlotCard]) -> Vec<PyPlaced> {
+/// Result entry: (type, color, scale_color, groups, stack index or -1 for an empty slot).
+type PyPlacedOut = (String, String, String, Vec<String>, i64);
+
+fn placed_to_py(asgn: &[SlotCard]) -> Vec<PyPlacedOut> {
     asgn.iter().map(|c| (
         tag_card_type_to_str(c.t).to_owned(),
         tag_color_to_str(c.color).to_owned(),
         tag_color_to_str(c.scale).to_owned(),
         group_bits_to_strs(c.groups).iter().map(|s| s.to_string()).collect(),
+        if c.stack == u16::MAX { -1 } else { c.stack as i64 },
     )).collect()
 }
 

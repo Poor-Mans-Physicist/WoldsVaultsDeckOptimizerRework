@@ -249,40 +249,47 @@ modes:
     cards:
       json_file: vh_modifiers.json
 
-# Deck and core rework (test/core-rework, src/rework.py). Greater-tier maximum rolls. Additive cores add to the
-# card's core sum; void / empyreal / arsenal / aegis / tool / pluto multiply (self-additive inside, product across).
-# Per-card units: pure / premium per counted card, equilibrium per color, void per empty slot, archive (1+v)^n - 1,
-# aegis per orthogonal Defensive neighbour, tool per other Utility card, talent per surrounding Knack card,
-# greed per greed card when 2+ greed cards target the same card.
+# Deck and core rework (test/core-rework, src/rework.py). Additive cores add to the card's core sum; void / empyreal /
+# arsenal / aegis / tool / pluto multiply (self-additive inside, product across). Per-card units: pure / premium per
+# counted card, equilibrium per color, void per empty slot, archive (1+v)^n - 1, aegis per orthogonal Defensive
+# neighbour, tool per other Utility card, talent per surrounding Knack card, greed per greed card when 2+ greed cards
+# target the same card. Multiplicative rolls are stored as the bonus (x1.5 -> 0.5).
 rework:
-  greed_addend: 1.25        # Elite greed max roll (+125%)
   mystery_scale: 0.75       # Mystery decks inherit modifiers at 75% strength
   runic_tag: 0.2            # Runic: x(1 + 0.2 per shared tag, color counts) when mirrored cards share a color
   shadow_void: 0.04         # Shadow: built-in void core, x(1 + 0.04 per empty slot)
   villager_nitwit: 3.0      # Villager: +300% on Arcane slots (built-in Nitwit)
-  empyreal_slots: 3
   deluxe_base: 1.0          # deluxe cards give their listed value (NDM's 2x base is not a stat multiplier)
-  cores:
-    pure: 0.05
-    equilibrium: 0.36
-    steadfast: 1.1
-    shiny: 0.9
-    color: 0.6
-    premium: 0.125
-    void: 0.08
-    archive: 0.225
-    empyreal: 0.4
-    arsenal: 0.5
-    aegis: 0.175
-    tool: 0.08
-    natural: 1.4
-    fae: 1.4
-    jupiter: 0.85
-    pluto: 0.6
-    nitwit: 3.0
-    bazaar: 0.8
-    talent: 0.8
-    temporal: 2.0
-    greed: 0.25
+  # Roll ranges [lo, hi]: normal and greater (lesser unused). Empyreal slots per tier in empyreal_slots.
+  rolls:
+    pure:        {normal: [0.02, 0.03],   greater: [0.03, 0.05]}
+    equilibrium: {normal: [0.12, 0.20],   greater: [0.20, 0.36]}
+    steadfast:   {normal: [0.35, 0.55],   greater: [0.70, 1.10]}
+    shiny:       {normal: [0.3, 0.6],     greater: [0.6, 0.9]}
+    color:       {normal: [0.1, 0.3],     greater: [0.4, 0.6]}
+    premium:     {normal: [0.05, 0.10],   greater: [0.10, 0.125]}
+    void:        {normal: [0.03, 0.05],   greater: [0.06, 0.08]}
+    archive:     {normal: [0.075, 0.125], greater: [0.15, 0.225]}
+    empyreal:    {normal: [0.2, 0.3],     greater: [0.3, 0.4]}
+    arsenal:     {normal: [0.3, 0.4],     greater: [0.4, 0.5]}
+    aegis:       {normal: [0.075, 0.125], greater: [0.125, 0.175]}
+    tool:        {normal: [0.03, 0.05],   greater: [0.05, 0.08]}
+    natural:     {normal: [0.75, 1.1],    greater: [1.1, 1.4]}
+    fae:         {normal: [0.75, 1.1],    greater: [1.1, 1.4]}
+    jupiter:     {normal: [0.4, 0.6],     greater: [0.6, 0.85]}
+    pluto:       {normal: [0.25, 0.4],    greater: [0.4, 0.6]}
+    nitwit:      {normal: [1.0, 2.0],     greater: [2.0, 3.0]}
+    bazaar:      {normal: [0.4, 0.6],     greater: [0.6, 0.8]}
+    talent:      {normal: [0.4, 0.6],     greater: [0.6, 0.8]}
+    temporal:    {normal: [0.70, 1.00],   greater: [1.0, 2.0]}
+    greed:       {normal: [0.10, 0.15],   greater: [0.15, 0.25]}
+  empyreal_slots: {normal: 2, greater: 3}
   pool: [pure, equilibrium, steadfast, shiny, color, premium, void, archive, empyreal, arsenal, aegis, tool,
          natural, fae, jupiter, pluto, nitwit, bazaar, talent, temporal, greed]
+  # Per stage: greed card bonus, which roll the optimizer uses (normal_mid / normal_top / greater_top), card limits
+  # (separate caps), whether Mystery decks are allowed.
+  stages:
+    early: {greed: 0.75, rolls: normal_mid, mystery: false, limits: {knack: 1, temporal: 1, deluxe: 2}}
+    mid:   {greed: 1.00, rolls: normal_top, mystery: false, limits: {}}
+    end:   {greed: 1.25, rolls: greater_top, mystery: false, limits: {}}
+    max:   {greed: 1.50, rolls: greater_top, mystery: true, limits: {}}

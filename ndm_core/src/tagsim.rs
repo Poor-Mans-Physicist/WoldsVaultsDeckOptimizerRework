@@ -2816,7 +2816,7 @@ fn xgroups(c: &SlotCard, cfg: &TagSimConfig) -> u32 {
     } else if c.t == T_DELUXE {
         m |= XG_DELUXE | XG_STAT;
     } else if c.t == T_TYPELESS {
-        m |= XG_STAT;
+        if m & XG_NONSTAT == 0 { m |= XG_STAT; }
     } else if is_greed(c.t) {
         m |= XG_GREED;
     } else if c.t == T_ARCANE {
@@ -3006,7 +3006,7 @@ fn simulate_rework(
         for imp in implicits {
             match *imp {
                 Implicit::GlobalFlat { value, groups, colors } => {
-                    let group_ok = c.groups & groups == groups;
+                    let group_ok = m & groups as u32 == groups as u32;
                     let color_ok = colors == 0 || (c.color != COLOR_NONE && colors & (1 << c.color) != 0);
                     if group_ok && color_ok { add += value; }
                 }
