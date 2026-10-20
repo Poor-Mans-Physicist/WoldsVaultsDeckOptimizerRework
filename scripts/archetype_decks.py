@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--keep", type=int, default=12)
     ap.add_argument("--margin", type=float, default=0.02)
     ap.add_argument("--top", type=int, default=4, help="layouts written per archetype")
+    ap.add_argument("--no-deluxe", action="store_true", help="no Deluxe cards or Deluxe core (an availability cap)")
     args, _ = ap.parse_known_args()
 
     sd = A.load_stage(args.weights, args.stage)
@@ -70,7 +71,8 @@ def main():
     arch["all"] = [b["family"] for b in sd["builds"]]
     models = {a: A.value_terms(sd, m) for a, m in arch.items()}
     cands = candidate_decks(sd, set(args.decks.split(",")) if args.decks else None)
-    combos = [(ci, cores) for ci, (d, *_r) in enumerate(cands) for cores in A.core_sets(d)]
+    dlx = not args.no_deluxe
+    combos = [(ci, cores) for ci, (d, *_r) in enumerate(cands) for cores in A.core_sets(d, dlx)]
     print(f"{args.stage}: {len(arch)} archetypes x {len(cands)} decks x core sets = {len(arch) * len(combos)} "
           f"candidates", flush=True)
 
@@ -80,7 +82,7 @@ def main():
     for a in arch:
         for ci, cores in combos:
             d, imps, *_r = cands[ci]
-            jobs.append(A.job(d, imps, cores, sd, models[a], n1, r1, None, A.seed_for("s", a, d.key, cores)))
+            jobs.append(A.job(d, imps, cores, sd, models[a], n1, r1, None, A.seed_for("s", a, d.key, cores), dlx))
             keys.append((a, ci, cores))
     outs = run_sa_jobs(jobs)
     print(f"  screen: {len(jobs)} jobs in {time.perf_counter() - t0:.0f}s", flush=True)
@@ -98,7 +100,7 @@ def main():
         keep = [k for k, _ in ranked[:max(args.keep, len(keep))]]
         for (_a, ci, cores) in keep:
             d, imps, *_r = cands[ci]
-            jobs.append(A.job(d, imps, cores, sd, models[a], n2, r2, PHASE2, A.seed_for("f", a, d.key, cores)))
+            jobs.append(A.job(d, imps, cores, sd, models[a], n2, r2, PHASE2, A.seed_for("f", a, d.key, cores), dlx))
             keys.append((a, ci, cores))
     outs = run_sa_jobs(jobs)
     print(f"  full: {len(jobs)} jobs in {time.perf_counter() - t0:.0f}s", flush=True)

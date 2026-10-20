@@ -40,10 +40,16 @@ def log(msg):
     print(msg, flush=True)
 
 
-def candidates(sd, stage):
+def candidates(sd, stage, layout_only=False):
     """{label: (deck, implicit keys, mystery, mystery shape or None)} for the non-Mystery decks, and the Mystery
-    shapes (label -> deck) when the stage allows them."""
+    shapes (label -> deck) when the stage allows them. layout_only: just the stage's fixed ledger layout (its shape
+    and implicits, Mystery pairs at the rework strength), re-optimized under the rework rules."""
     out, shapes = {}, {}
+    if layout_only:
+        entry = sd["layout_entry"]
+        shape, _ = A.deck_from_entry(entry)
+        out[f"Stage layout ({entry['deck']})"] = (shape, list(entry["implicits"]), "Mystery" in entry["deck"])
+        return out, shapes
     for d in DECKS:
         if d.key == "mystery":
             if R.STAGES[stage]["mystery"]:
@@ -119,6 +125,7 @@ def main():
     ap.add_argument("--screen", default="2,20000")
     ap.add_argument("--full", default="4,40000")
     ap.add_argument("--regret", action="store_true")
+    ap.add_argument("--layout-only", action="store_true", help="only the stage's fixed ledger layout (2x2 deck study)")
     args, _ = ap.parse_known_args()
     stage = args.stage
     t_all = time.perf_counter()
@@ -127,7 +134,7 @@ def main():
     groups = {str(k): v for k, v in A.archetypes(sd, args.k).items()}
     groups["all"] = [b["family"] for b in sd["builds"]]
     models = {g: A.value_terms(sd, m) for g, m in groups.items()}
-    decks, shapes = candidates(sd, stage)
+    decks, shapes = candidates(sd, stage, args.layout_only)
     S = Search(sd, stage, models, args)
     log(f"{stage}: {len(sd['builds'])} builds in {len(groups) - 1} groups "
         f"({', '.join(str(len(v)) for g, v in sorted(groups.items()) if g != 'all')}), {len(decks)} decks, "
@@ -292,19 +299,19 @@ def main():
             fam = b["family"]
             fixed = max(m["score_by_build"][fam] for m in menu)
             o = own[fam]
+            # In cycles: build values can be negative early, so ratios are meaningless there.
             reg[fam] = {"own_best": o, "menu_fixed": fixed, "menu_reannealed": menu_re[fam],
-                        "regret_hi": max(0.0, 1.0 - fixed / o) if o > 0 else None,
-                        "regret_lo": max(0.0, 1.0 - menu_re[fam] / o) if o > 0 else None}
+                        "regret_hi": max(0.0, o - fixed), "regret_lo": max(0.0, o - menu_re[fam])}
 
         def stat(key):
-            vals = [r[key] for r in reg.values() if r[key] is not None]
+            vals = [r[key] for r in reg.values()]
             return {"mean": sum(vals) / len(vals), "max": max(vals)}
 
         hi, lo = stat("regret_hi"), stat("regret_lo")
-        result["regret"] = {"per_build": reg, "mean": hi["mean"], "max": hi["max"], "lo_mean": lo["mean"],
-                            "lo_max": lo["max"], "jobs": len(jobs), "s": time.perf_counter() - t0}
-        log(f"  regret: fixed cards mean {hi['mean']:.2%} (max {hi['max']:.2%}); re-annealed mean {lo['mean']:.2%} "
-            f"(max {lo['max']:.2%}) ({len(jobs)} runs in {result['regret']['s']:.0f}s)")
+        result["regret"] = {"per_build": reg, "unit": "cycles", "mean": hi["mean"], "max": hi["max"],
+                            "lo_mean": lo["mean"], "lo_max": lo["max"], "jobs": len(jobs), "s": time.perf_counter() - t0}
+        log(f"  regret (cycles): fixed cards mean {hi['mean']:.3f} (max {hi['max']:.3f}); re-annealed mean "
+            f"{lo['mean']:.3f} (max {lo['max']:.3f}) ({len(jobs)} runs in {result['regret']['s']:.0f}s)")
 
     result["timing"]["total_s"] = time.perf_counter() - t_all
     with open(args.out, "w", encoding="utf-8") as f:
