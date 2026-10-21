@@ -6,7 +6,7 @@ import topLevelAwait from "vite-plugin-top-level-await";
 // Deployed to https://<user>.github.io/woldsvaultsdeckoptimizer/ so all
 // asset URLs must be prefixed with the repo name. Override with VITE_BASE
 // for custom deployments (e.g. local preview or a custom domain).
-const base = process.env.VITE_BASE ?? "/woldsvaultsdeckoptimizer/";
+const base = process.env.VITE_BASE ?? "/WoldsVaultsDeckOptimizerRework/";
 
 export default defineConfig({
   base,

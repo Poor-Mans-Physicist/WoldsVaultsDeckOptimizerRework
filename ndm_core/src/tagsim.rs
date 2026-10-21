@@ -92,15 +92,20 @@ pub const CORE_SPARKLING: u8   = 8;
 // String ↔ id conversions (boundary only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub fn tag_card_type_from_str(s: &str) -> u8 {
-    match s {
+pub fn try_tag_card_type_from_str(s: &str) -> Option<u8> {
+    Some(match s {
         "row" => T_ROW, "col" => T_COL, "surr" => T_SURR, "diag" => T_DIAG,
         "deluxe" => T_DELUXE, "typeless" => T_TYPELESS,
         "dir_greed_up" => T_G_UP, "dir_greed_down" => T_G_DOWN,
         "dir_greed_left" => T_G_LEFT, "dir_greed_right" => T_G_RIGHT,
         "arcane" => T_ARCANE, "wild" => T_WILD, "dead" => T_DEAD,
-        other => panic!("tagsim: unknown card type: {}", other),
-    }
+        _ => return None,
+    })
+}
+
+/// Panics on an unknown name; try_tag_card_type_from_str returns None instead (the WASM binding uses it, since a panic traps the worker).
+pub fn tag_card_type_from_str(s: &str) -> u8 {
+    try_tag_card_type_from_str(s).unwrap_or_else(|| panic!("tagsim: unknown card type: {}", s))
 }
 
 pub fn tag_card_type_to_str(t: u8) -> &'static str {
@@ -114,12 +119,17 @@ pub fn tag_card_type_to_str(t: u8) -> &'static str {
     }
 }
 
-pub fn tag_color_from_str(s: &str) -> u8 {
-    match s {
+pub fn try_tag_color_from_str(s: &str) -> Option<u8> {
+    Some(match s {
         "red" => RED, "green" => GREEN, "blue" => BLUE, "yellow" => YELLOW,
         "" => COLOR_NONE,
-        other => panic!("tagsim: unknown color: {}", other),
-    }
+        _ => return None,
+    })
+}
+
+/// Panics on an unknown name; try_tag_color_from_str returns None instead (the WASM binding uses it, since a panic traps the worker).
+pub fn tag_color_from_str(s: &str) -> u8 {
+    try_tag_color_from_str(s).unwrap_or_else(|| panic!("tagsim: unknown color: {}", s))
 }
 
 pub fn tag_color_to_str(c: u8) -> &'static str {
@@ -130,15 +140,20 @@ pub fn tag_color_to_str(c: u8) -> &'static str {
     }
 }
 
-pub fn group_bit_from_str(s: &str) -> u16 {
-    match s {
+pub fn try_group_bit_from_str(s: &str) -> Option<u16> {
+    Some(match s {
         "Offensive" => G_OFFENSIVE, "Defensive" => G_DEFENSIVE,
         "Physical" => G_PHYSICAL,   "Magical" => G_MAGICAL,
         "Utility" => G_UTILITY,     "Resource" => G_RESOURCE,
         "Knack" => G_KNACK,         "Temporal" => G_TEMPORAL,
         "Essence" => G_ESSENCE,     "Foil" => G_FOIL, "Stat" => G_STAT,
-        other => panic!("tagsim: unknown group: {}", other),
-    }
+        _ => return None,
+    })
+}
+
+/// Panics on an unknown name; try_group_bit_from_str returns None instead (the WASM binding uses it, since a panic traps the worker).
+pub fn group_bit_from_str(s: &str) -> u16 {
+    try_group_bit_from_str(s).unwrap_or_else(|| panic!("tagsim: unknown group: {}", s))
 }
 
 pub fn group_bits_to_strs(mask: u16) -> Vec<&'static str> {
@@ -152,15 +167,20 @@ pub fn group_bits_to_strs(mask: u16) -> Vec<&'static str> {
     NAMES.iter().filter(|(_, b)| mask & b != 0).map(|(n, _)| *n).collect()
 }
 
-pub fn tag_core_from_str(s: &str) -> u8 {
-    match s {
+pub fn try_tag_core_from_str(s: &str) -> Option<u8> {
+    Some(match s {
         "pure" => CORE_PURE, "equilibrium" => CORE_EQUILIBRIUM,
         "steadfast" => CORE_STEADFAST, "sparkling" => CORE_SPARKLING,
         "color" => CORE_COLOR, "foil" => CORE_FOIL,
         "deluxe_core" => CORE_DELUXE, "void_core" => CORE_VOID,
         "archive_core" => CORE_ARCHIVE,
-        other => panic!("tagsim: unknown core type: {}", other),
-    }
+        _ => return None,
+    })
+}
+
+/// Panics on an unknown name; try_tag_core_from_str returns None instead (the WASM binding uses it, since a panic traps the worker).
+pub fn tag_core_from_str(s: &str) -> u8 {
+    try_tag_core_from_str(s).unwrap_or_else(|| panic!("tagsim: unknown core type: {}", s))
 }
 
 #[inline(always)]
@@ -238,10 +258,13 @@ pub struct CardSpec {
 /// each curve piecewise linear on a uniform grid over the attribute's deck total (flat outside it, zero when empty).
 /// A term is one build: damage and survival channels plus additive extras (threshold penalties). One single-channel
 /// term is a plain per-attribute sum. None keeps the NDM objective.
+/// An unscaled stack (Knack / Arcane level cards) adds its value to its attribute whenever it is placed, whatever the
+/// slot's multiplier: deck multipliers never scale granted levels. A term may also carry a loot term (LootTerm).
 #[derive(Clone, Debug)]
 pub struct ValueModel {
     pub stack_value: Vec<f64>,
     pub stack_attr: Vec<u8>,
+    pub stack_unscaled: Vec<bool>,
     pub terms: Vec<ValueTerm>,
 }
 
@@ -250,6 +273,89 @@ pub struct ValueTerm {
     pub weight: f64,
     pub channels: Vec<ValueChannel>,
     pub extra: Vec<Curve>,
+    pub loot: Option<LootTerm>,
+}
+
+/// Omega and mythic pool hits per `scale` mapped chests (Wold's Vaults greed rework, MythicLootScaling and
+/// MixinTieredLootTableGenerator): per chest type, E[rolls] x (p_omega + mythic_weight x p_mythic), averaged over the
+/// chest types. Rolls: each base roll b (equally likely) gives f = b (1 + 1.1 ln(1 + Q)), rounded stochastically and
+/// capped; E = cap when floor(f) >= cap, else f. Pool i weight w_i x s_i(R) with s_0 = 1, s_1 = s_2 = 1 + R,
+/// s_3 = (1+R)^(1 + 0.12 ramp), s_4 = (1+R)^(1.70 + 0.151 ramp), ramp = (log10(1+R) / log10(201))^1.4, and 1 + R for
+/// every pool i >= 1 when R <= 0. Q = base_q + deck IQ; R = (base_r + deck IR) x the path's rarity multiplier. Each path
+/// is (roll cap, rarity multiplier), e.g. Tenos Massive Chests (cap + 20, rarity x0.5); the best path counts.
+#[derive(Clone, Debug)]
+pub struct LootTerm {
+    pub iq_attr: usize,
+    pub ir_attr: usize,
+    pub base_q: f64,
+    pub base_r: f64,
+    pub base_rolls: Vec<f64>,
+    pub chests: Vec<[f64; 5]>,
+    pub mythic_weight: f64,
+    pub paths: Vec<(f64, f64)>,
+    pub scale: f64,
+}
+
+/// Per-slot breakdown of the rework score (explain_tagged): term = base x (1 + sum adds) x prod mults x boost x empyreal.
+/// Sources are rework core kinds (RW_*) or the SRC_* codes below.
+#[derive(Clone, Debug, Default)]
+pub struct SlotParts {
+    pub term: f64,
+    pub base: f64,
+    pub adds: Vec<(u16, f64)>,
+    pub mults: Vec<(u16, f64)>,
+    pub boost: f64,
+    pub empyreal: f64,
+}
+
+pub const SRC_VOID: u16 = 100;
+pub const SRC_NITWIT: u16 = 101;
+pub const SRC_IMP_GLOBAL: u16 = 110;
+pub const SRC_IMP_ADJACENCY: u16 = 111;
+pub const SRC_IMP_MISMATCH: u16 = 112;
+pub const SRC_IMP_ROW: u16 = 113;
+pub const SRC_IMP_CHAIN: u16 = 114;
+pub const SRC_IMP_UNIQUE: u16 = 115;
+pub const SRC_IMP_MIRROR: u16 = 116;
+
+pub fn loot_pool_scale(i: usize, r: f64) -> f64 {
+    if i == 0 { return 1.0; }
+    if r <= 0.0 { return 1.0 + r; }
+    let ramp = ((1.0 + r).log10() / 201f64.log10()).powf(1.4);
+    match i {
+        3 => (1.0 + r).powf(1.0 + 0.12 * ramp),
+        4 => (1.0 + r).powf(1.0 + 0.151 * ramp + 0.70),
+        _ => 1.0 + r,
+    }
+}
+
+impl LootTerm {
+    /// (score, index of the winning path) at deck totals `q` (IQ) and `r` (IR).
+    pub fn eval(&self, q: f64, r: f64) -> (f64, usize) {
+        let qq = (self.base_q + q).max(0.0);
+        let mult = 1.0 + 1.1 * (1.0 + qq).ln();
+        let mut best = (f64::NEG_INFINITY, 0usize);
+        for (pi, &(cap, rmul)) in self.paths.iter().enumerate() {
+            let mut rolls = 0.0;
+            for &b in &self.base_rolls {
+                let f = b * mult;
+                rolls += if f.floor() >= cap { cap } else { f };
+            }
+            rolls /= self.base_rolls.len().max(1) as f64;
+            let rr = (self.base_r + r) * rmul;
+            let sc: [f64; 5] = std::array::from_fn(|i| loot_pool_scale(i, rr));
+            let mut hits = 0.0;
+            for w in &self.chests {
+                let z: f64 = (0..5).map(|i| w[i] * sc[i]).sum();
+                if z > 0.0 {
+                    hits += rolls * (w[3] * sc[3] + self.mythic_weight * w[4] * sc[4]) / z;
+                }
+            }
+            let v = self.scale * hits / self.chests.len().max(1) as f64;
+            if v > best.0 { best = (v, pi); }
+        }
+        if best.0.is_finite() { best } else { (0.0, 0) }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -266,7 +372,7 @@ pub struct Curve {
 }
 
 pub const NO_ATTR: u8 = u8::MAX;
-pub const MAX_VALUE_ATTRS: usize = 32;
+pub const MAX_VALUE_ATTRS: usize = 64;
 
 impl Curve {
     #[inline(always)]
@@ -284,11 +390,13 @@ impl Curve {
 
 impl ValueModel {
     #[inline(always)]
-    fn slot(&self, c: &SlotCard) -> Option<(usize, f64)> {
+    fn slot(&self, c: &SlotCard) -> Option<(usize, f64, bool)> {
         let si = c.stack as usize;
         if c.t == T_DEAD || si >= self.stack_attr.len() { return None; }
         let a = self.stack_attr[si];
-        if a == NO_ATTR { None } else { Some((a as usize, self.stack_value[si])) }
+        if a == NO_ATTR { None } else {
+            Some((a as usize, self.stack_value[si], self.stack_unscaled.get(si).copied().unwrap_or(false)))
+        }
     }
 
     #[inline(always)]
@@ -303,6 +411,7 @@ impl ValueModel {
             }
             if !lo.is_finite() { lo = 0.0; }
             for (a, c) in t.extra.iter().enumerate() { lo += c.at(x[a]); }
+            if let Some(l) = &t.loot { lo += l.eval(x[l.iq_attr], x[l.ir_attr]).0; }
             s += t.weight * lo;
         }
         s
@@ -1280,7 +1389,7 @@ fn simulate(
     s: &mut Scratch,
 ) -> f64 {
     if let Some(rw) = &cores.rw {
-        return simulate_rework(geom, asgn, cores, rw, implicits, cfg, s);
+        return simulate_rework(geom, asgn, cores, rw, implicits, cfg, s, None);
     }
     let n = geom.n;
     s.counts.rebuild(geom, asgn);
@@ -1301,10 +1410,11 @@ fn simulate(
     if let Some(vm) = &cores.vm {
         let mut x = [0.0f64; MAX_VALUE_ATTRS];
         for i in 0..n {
+            if let Some((a, v, true)) = vm.slot(&asgn[i]) { x[a] += v; continue; }
             let si = slot_scan(&ctx, asgn, i);
             if !si.contributes { continue; }
             let t = finish_term(&ctx, asgn, i, &si, s.boost[i]);
-            if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += t * v; }
+            if let Some((a, v, _)) = vm.slot(&asgn[i]) { x[a] += t * v; }
         }
         return vm.score(&x);
     }
@@ -1582,8 +1692,9 @@ impl DeltaEval {
         if let Some(vm) = &cores.vm {
             let mut x = [0.0f64; MAX_VALUE_ATTRS];
             for (i, si) in self.inputs.iter().enumerate() {
+                if let Some((a, v, true)) = vm.slot(&asgn[i]) { x[a] += v; continue; }
                 if !si.contributes { continue; }
-                if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += self.term[i] * v; }
+                if let Some((a, v, _)) = vm.slot(&asgn[i]) { x[a] += self.term[i] * v; }
             }
             return vm.score(&x);
         }
@@ -2698,6 +2809,19 @@ pub fn run_sa_tagged(run: TagRun<'_>) -> (Vec<SlotCard>, f64) {
     }).expect("at least one restart")
 }
 
+/// Per-slot breakdown of a fixed assignment under the rework scoring path, with the score. None without `rework`.
+pub fn explain_tagged(run: &TagRun<'_>, asgn: &[SlotCard]) -> Option<(f64, Vec<SlotParts>)> {
+    let rw = run.rework.clone()?;
+    let geom = build_geom(run);
+    let mut cores = Cores::build(&run.cores);
+    cores.vm = run.value_model.clone();
+    cores.rw = Some(rw.clone());
+    let mut s = Scratch::new(&geom);
+    let mut parts = Vec::new();
+    let score = simulate_rework(&geom, asgn, &cores, &rw, &run.implicits, &run.cfg, &mut s, Some(&mut parts));
+    Some((score, parts))
+}
+
 /// Score a FIXED assignment (no SA). Used by the parity harness, the TS
 /// what-if popup verification, and snapshot restores.
 pub fn score_tagged(run: &TagRun<'_>, asgn: &[SlotCard]) -> f64 {
@@ -2743,16 +2867,21 @@ pub const RW_TALENT: u8 = 17;
 pub const RW_TEMPORAL: u8 = 18;
 pub const RW_GREED: u8 = 19;
 
-pub fn rw_core_from_str(s: &str) -> u8 {
-    match s {
+pub fn try_rw_core_from_str(s: &str) -> Option<u8> {
+    Some(match s {
         "pure" => RW_PURE, "equilibrium" => RW_EQUILIBRIUM, "steadfast" => RW_STEADFAST,
         "shiny" => RW_SHINY, "color" => RW_COLOR, "premium" => RW_PREMIUM, "void" => RW_VOID,
         "archive" => RW_ARCHIVE, "empyreal" => RW_EMPYREAL, "arsenal" => RW_ARSENAL,
         "aegis" => RW_AEGIS, "tool" => RW_TOOL, "natural" => RW_NATURAL, "fae" => RW_FAE,
         "jupiter" => RW_JUPITER, "pluto" => RW_PLUTO, "bazaar" => RW_BAZAAR,
         "talent" => RW_TALENT, "temporal" => RW_TEMPORAL, "greed" => RW_GREED,
-        other => panic!("tagsim: unknown rework core: {}", other),
-    }
+        _ => return None,
+    })
+}
+
+/// Panics on an unknown name; try_rw_core_from_str returns None instead (the WASM binding uses it, since a panic traps the worker).
+pub fn rw_core_from_str(s: &str) -> u8 {
+    try_rw_core_from_str(s).unwrap_or_else(|| panic!("tagsim: unknown rework core: {}", s))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2848,8 +2977,14 @@ fn simulate_rework(
     implicits: &[Implicit],
     cfg: &TagSimConfig,
     s: &mut Scratch,
+    mut parts: Option<&mut Vec<SlotParts>>,
 ) -> f64 {
     let n = geom.n;
+    let rec = parts.is_some();
+    if let Some(p) = parts.as_deref_mut() {
+        p.clear();
+        p.resize(n, SlotParts { empyreal: 1.0, boost: 1.0, ..Default::default() });
+    }
     s.counts.rebuild(geom, asgn);
     let xg: Vec<u32> = asgn.iter().map(|c| xgroups(c, cfg)).collect();
 
@@ -2874,6 +3009,7 @@ fn simulate_rework(
 
     // Deck-global core pieces.
     let mut add_all = 0.0f64;              // additive bonus every scorable card gets
+    let mut add_all_parts: Vec<(u16, f64)> = Vec::new();
     let mut void_rate = 0.0f64;
     let mut jupiter = (0u32, 0.0f64);
     let mut pluto = (0u32, 0.0f64);
@@ -2881,8 +3017,16 @@ fn simulate_rework(
     let mut empyreal: Option<(f64, usize)> = None;
     for core in &rw.cores {
         match core.kind {
-            RW_PREMIUM => add_all += core.value * n_deluxe as f64,
-            RW_ARCHIVE => add_all += (1.0 + core.value).powf(n_arcane as f64) - 1.0,
+            RW_PREMIUM => {
+                let x = core.value * n_deluxe as f64;
+                add_all += x;
+                if rec { add_all_parts.push((RW_PREMIUM as u16, x)); }
+            }
+            RW_ARCHIVE => {
+                let x = (1.0 + core.value).powf(n_arcane as f64) - 1.0;
+                add_all += x;
+                if rec { add_all_parts.push((RW_ARCHIVE as u16, x)); }
+            }
             RW_VOID => void_rate += core.value,
             RW_JUPITER => jupiter = (dominant_group(&gcount, true, XG_STAT), core.value),
             RW_PLUTO => pluto = (dominant_group(&gcount, false, 0), core.value),
@@ -2976,39 +3120,51 @@ fn simulate_rework(
 
         let mut add = add_all;
         let mut mult = void_factor;
+        let mut padd: Vec<(u16, f64)> = Vec::new();
+        let mut pmul: Vec<(u16, f64)> = Vec::new();
+        if rec {
+            padd.extend_from_slice(&add_all_parts);
+            if void_factor != 1.0 { pmul.push((SRC_VOID, void_factor)); }
+        }
+        macro_rules! radd {
+            ($src:expr, $x:expr) => {{ let x = $x; add += x; if rec { padd.push(($src as u16, x)); } }};
+        }
+        macro_rules! rmul {
+            ($src:expr, $x:expr) => {{ let x = $x; mult *= x; if rec { pmul.push(($src as u16, x)); } }};
+        }
         for core in &rw.cores {
             let v = core.value;
             match core.kind {
-                RW_PURE => if has(XG_STAT | XG_EVOLUTION) { add += v * n_nonfoil as f64; },
-                RW_EQUILIBRIUM => if has(XG_STAT) { add += v * n_colors; },
-                RW_STEADFAST => if has(XG_STAT) { add += v; },
-                RW_SHINY => if has(G_FOIL as u32) { add += v; },
-                RW_COLOR => if core.color == COLOR_NONE || c.color == core.color { add += v; },
-                RW_NATURAL => if has(G_PHYSICAL as u32) { add += v; },
-                RW_FAE => if has(G_MAGICAL as u32) { add += v; },
-                RW_BAZAAR => if count_peers(&geom.surr_peers[i], G_RESOURCE as u32) > 0 { add += v; },
-                RW_TALENT => add += v * count_peers(&geom.surr_peers[i], G_KNACK as u32) as f64,
-                RW_TEMPORAL => if count_peers(&rw.starcross[i], G_TEMPORAL as u32) > 0 { add += v; },
-                RW_ARSENAL => if has(G_OFFENSIVE as u32) { mult *= 1.0 + v; },
+                RW_PURE => if has(XG_STAT | XG_EVOLUTION) { radd!(RW_PURE, v * n_nonfoil as f64); },
+                RW_EQUILIBRIUM => if has(XG_STAT) { radd!(RW_EQUILIBRIUM, v * n_colors); },
+                RW_STEADFAST => if has(XG_STAT) { radd!(RW_STEADFAST, v); },
+                RW_SHINY => if has(G_FOIL as u32) { radd!(RW_SHINY, v); },
+                RW_COLOR => if core.color == COLOR_NONE || c.color == core.color { radd!(RW_COLOR, v); },
+                RW_NATURAL => if has(G_PHYSICAL as u32) { radd!(RW_NATURAL, v); },
+                RW_FAE => if has(G_MAGICAL as u32) { radd!(RW_FAE, v); },
+                RW_BAZAAR => if count_peers(&geom.surr_peers[i], G_RESOURCE as u32) > 0 { radd!(RW_BAZAAR, v); },
+                RW_TALENT => radd!(RW_TALENT, v * count_peers(&geom.surr_peers[i], G_KNACK as u32) as f64),
+                RW_TEMPORAL => if count_peers(&rw.starcross[i], G_TEMPORAL as u32) > 0 { radd!(RW_TEMPORAL, v); },
+                RW_ARSENAL => if has(G_OFFENSIVE as u32) { rmul!(RW_ARSENAL, 1.0 + v); },
                 RW_AEGIS => if has(G_DEFENSIVE as u32) {
                     let k = geom.orth_sorted[i].iter()
                         .filter(|&&q| asgn[q].t != T_DEAD && xg[q] & G_DEFENSIVE as u32 != 0).count();
-                    mult *= 1.0 + v * k as f64;
+                    rmul!(RW_AEGIS, 1.0 + v * k as f64);
                 },
-                RW_TOOL => if has(G_UTILITY as u32) { mult *= 1.0 + v * (n_util.saturating_sub(1)) as f64; },
+                RW_TOOL => if has(G_UTILITY as u32) { rmul!(RW_TOOL, 1.0 + v * (n_util.saturating_sub(1)) as f64); },
                 _ => {}
             }
         }
-        if jupiter.0 != 0 && has(jupiter.0) { add += jupiter.1; }
-        if pluto.0 != 0 && has(pluto.0) { mult *= 1.0 + pluto.1; }
-        if rw.nitwit_slots.get(i).copied().unwrap_or(false) { add += rw.nitwit_value; }
+        if jupiter.0 != 0 && has(jupiter.0) { radd!(RW_JUPITER, jupiter.1); }
+        if pluto.0 != 0 && has(pluto.0) { rmul!(RW_PLUTO, 1.0 + pluto.1); }
+        if rw.nitwit_slots.get(i).copied().unwrap_or(false) { radd!(SRC_NITWIT, rw.nitwit_value); }
 
         for imp in implicits {
             match *imp {
                 Implicit::GlobalFlat { value, groups, colors } => {
                     let group_ok = m & groups as u32 == groups as u32;
                     let color_ok = colors == 0 || (c.color != COLOR_NONE && colors & (1 << c.color) != 0);
-                    if group_ok && color_ok { add += value; }
+                    if group_ok && color_ok { radd!(SRC_IMP_GLOBAL, value); }
                 }
                 Implicit::Adjacency { value, group, surrounding } => {
                     let peers = if surrounding { &geom.surr_peers[i] } else { &geom.col_peers[i] };
@@ -3016,21 +3172,21 @@ fn simulate_rework(
                         let qc = asgn[q];
                         qc.t != T_DEAD && !is_greed(qc.t) && (qc.t == T_WILD || qc.groups & group != 0)
                     }).count();
-                    add += value * k as f64;
+                    radd!(SRC_IMP_ADJACENCY, value * k as f64);
                 }
                 Implicit::ColorMismatch { value } => {
                     let k = geom.orth_sorted[i].iter().filter(|&&q| {
                         let qc = asgn[q];
                         qc.t != T_DEAD && (qc.t == T_WILD || (qc.color != COLOR_NONE && qc.color != c.color))
                     }).count();
-                    add += value * k as f64;
+                    radd!(SRC_IMP_MISMATCH, value * k as f64);
                 }
-                Implicit::RowPos { value } => add += value * geom.rows_from_bottom[i],
+                Implicit::RowPos { value } => radd!(SRC_IMP_ROW, value * geom.rows_from_bottom[i]),
                 Implicit::Chain { .. } => {
                     let id = s.chain_id[i] as usize;
-                    if id != 0 { add += chain_value * (s.chain_size[id] - 1) as f64; }
+                    if id != 0 { radd!(SRC_IMP_CHAIN, chain_value * (s.chain_size[id] - 1) as f64); }
                 }
-                Implicit::UniqueGroups { .. } => if has(XG_STAT) { add += unique_value * unique_groups; },
+                Implicit::UniqueGroups { .. } => if has(XG_STAT) { radd!(SRC_IMP_UNIQUE, unique_value * unique_groups); },
                 _ => {}
             }
         }
@@ -3043,10 +3199,16 @@ fn simulate_rework(
                 if mc.t == T_DEAD || is_greed(mc.t) || mc.color == COLOR_NONE || mc.color != c.color { None }
                 else { Some((m & xg[mi]).count_ones() + 1) }
             } else { None };
-            if let Some(k) = shared { mult *= 1.0 + mirror_tag * k as f64; }
+            if let Some(k) = shared { rmul!(SRC_IMP_MIRROR, 1.0 + mirror_tag * k as f64); }
         }
 
         terms[i] = base * (1.0 + add) * mult * s.boost[i];
+        if let Some(p) = parts.as_deref_mut() {
+            p[i].base = base;
+            p[i].boost = s.boost[i];
+            p[i].adds = padd;
+            p[i].mults = pmul;
+        }
     }
 
     if let Some((v, k)) = empyreal {
@@ -3054,14 +3216,23 @@ fn simulate_rework(
             .filter(|&i| terms[i] > 0.0 && xg[i] & (XG_STAT | XG_EVOLUTION) != 0)
             .collect();
         idx.sort_by(|&a, &b| terms[b].total_cmp(&terms[a]).then(a.cmp(&b)));
-        for &i in idx.iter().take(k) { terms[i] *= 1.0 + v; }
+        for &i in idx.iter().take(k) {
+            terms[i] *= 1.0 + v;
+            if let Some(p) = parts.as_deref_mut() { p[i].empyreal = 1.0 + v; }
+        }
     }
 
+    if let Some(p) = parts.as_deref_mut() {
+        for (i, sp) in p.iter_mut().enumerate() { sp.term = terms[i]; }
+    }
     if let Some(vm) = &cores.vm {
         let mut x = [0.0f64; MAX_VALUE_ATTRS];
         for i in 0..n {
-            if terms[i] == 0.0 { continue; }
-            if let Some((a, v)) = vm.slot(&asgn[i]) { x[a] += terms[i] * v; }
+            match vm.slot(&asgn[i]) {
+                Some((a, v, true)) => x[a] += v,
+                Some((a, v, false)) => if terms[i] != 0.0 { x[a] += terms[i] * v; },
+                None => {}
+            }
         }
         return vm.score(&x);
     }
@@ -3086,6 +3257,10 @@ mod rework_tests {
     fn card(t: u8, groups: u16) -> SlotCard { SlotCard { t, color: RED, scale: RED, groups, stack: 0 } }
 
     fn score(slots: &[(i32, i32)], asgn: &[SlotCard], rw: Rework, imps: Vec<Implicit>) -> f64 {
+        score_tagged(&make_run(slots, rw, imps, None), asgn)
+    }
+
+    fn make_run<'a>(slots: &'a [(i32, i32)], rw: Rework, imps: Vec<Implicit>, vm: Option<ValueModel>) -> TagRun<'a> {
         let n = slots.len();
         let mut row = vec![Vec::new(); n];
         let mut col = vec![Vec::new(); n];
@@ -3107,9 +3282,80 @@ mod rework_tests {
             blanket_groups: 0, assignable_groups: 0, legal_combos: Vec::new(), implicits: imps,
             cores: Vec::new(), min_stat_placed: 0, final_pass_nonfoil_evo: false, exact_groups: true,
             n_iter: 0, restarts: 1, seed: None, sched: SCHEDULE_LEGACY, opts: SearchOpts::default(),
-            value_model: None, rework: Some(rw.prepare(slots, &[])), cfg: cfg(),
+            value_model: vm, rework: Some(rw.prepare(slots, &[])), cfg: cfg(),
         };
-        score_tagged(&run, asgn)
+        run
+    }
+
+    fn linear(n_attr: usize) -> Vec<Curve> {
+        (0..n_attr).map(|_| Curve { x0: 0.0, dx: 1000.0, ys: vec![0.0, 1000.0] }).collect()
+    }
+
+    fn loot(base_q: f64, base_r: f64, paths: Vec<(f64, f64)>) -> LootTerm {
+        LootTerm {
+            iq_attr: 0, ir_attr: 1, base_q, base_r, base_rolls: vec![12.0, 13.0, 14.0, 15.0],
+            chests: vec![[70.0, 20.0, 8.0, 2.0, 0.00445], [70.0, 20.0, 4.0, 2.0, 0.00445],
+                         [70.0, 20.0, 8.0, 2.0, 0.00445], [80.0, 20.0, 8.0, 2.0, 0.00445]],
+            mythic_weight: 5.0, paths, scale: 1000.0,
+        }
+    }
+
+    #[test]
+    fn loot_term_matches_reference() {
+        // Reference values from the Python model of the same formulas (scratch loot2.py).
+        let early = loot(0.5, 1.0, vec![(54.0, 1.0)]);
+        assert!((early.eval(0.0, 0.0).0 - 613.413445636727).abs() < 1e-9);
+        let max = loot(4.0, 10.0, vec![(58.0, 1.0), (78.0, 0.5)]);
+        let (v, path) = max.eval(0.0, 0.0);
+        assert!((v - 2443.4121866074775).abs() < 1e-9 && path == 0, "{} {}", v, path);
+        let (v, path) = max.eval(36.0, 0.0);
+        assert!((v - 3789.233344167698).abs() < 1e-9 && path == 0, "{} {}", v, path);
+        let only = |c: f64, m: f64| loot(4.0, 10.0, vec![(c, m)]).eval(500.0, 0.0).0;
+        let (v, path) = max.eval(500.0, 0.0);
+        assert!(only(78.0, 0.5) > only(58.0, 1.0) && path == 1 && (v - only(78.0, 0.5)).abs() < 1e-12);
+        let neg = loot(0.0, 0.0, vec![(54.0, 1.0)]);
+        assert!((neg.eval(0.0, -0.5).0 - 157.32774398977227).abs() < 1e-9);
+    }
+
+    #[test]
+    fn unscaled_levels_ignore_multipliers() {
+        // Typeless Offensive stat card (stack 0, attr 0), a Knack card (stack 1, attr 1, 2 levels, unscaled), one dead
+        // slot. Void 0.08: the stat card's term is 1.08; the Knack card adds its 2 levels untouched.
+        let slots = [(0, 0), (0, 1), (0, 2)];
+        let mut stat = card(T_TYPELESS, G_OFFENSIVE);
+        stat.stack = 0;
+        let mut knack = card(T_TYPELESS, G_KNACK);
+        knack.stack = 1;
+        let a = [stat, knack, DEAD_CARD];
+        let vm = ValueModel {
+            stack_value: vec![1.0, 2.0], stack_attr: vec![0, 1], stack_unscaled: vec![false, true],
+            terms: vec![ValueTerm { weight: 1.0, channels: vec![ValueChannel { base: 0.0, curves: linear(2) }],
+                                    extra: Vec::new(), loot: None }],
+        };
+        let run = make_run(&slots, rw(&[(RW_VOID, 0.08, 0)]), vec![], Some(vm));
+        let v = score_tagged(&run, &a);
+        assert!((v - (1.08 + 2.0)).abs() < 1e-12, "{}", v);
+    }
+
+    #[test]
+    fn explain_parts_multiply_to_terms() {
+        let slots = [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1)];
+        let a = [card(T_TYPELESS, G_DEFENSIVE), card(T_TYPELESS, G_DEFENSIVE), DEAD_CARD,
+                 card(T_TYPELESS, G_OFFENSIVE), card(T_G_UP, 0), card(T_DELUXE, G_OFFENSIVE)];
+        let cores = rw(&[(RW_VOID, 0.08, 0), (RW_ARSENAL, 0.5, 0), (RW_PURE, 0.05, 0), (RW_EMPYREAL, 0.3, 1),
+                         (RW_AEGIS, 0.15, 0)]);
+        let run = make_run(&slots, cores, vec![Implicit::RowPos { value: 0.25 }], None);
+        let (score, parts) = explain_tagged(&run, &a).expect("rework run");
+        assert!((score - score_tagged(&run, &a)).abs() < 1e-12);
+        let mut sum = 0.0;
+        for p in &parts {
+            let add: f64 = p.adds.iter().map(|x| x.1).sum();
+            let mult: f64 = p.mults.iter().map(|x| x.1).product();
+            let t = if p.base == 0.0 { 0.0 } else { p.base * (1.0 + add) * mult * p.boost * p.empyreal };
+            assert!((t - p.term).abs() < 1e-12, "{} vs {}", t, p.term);
+            sum += p.term;
+        }
+        assert!((sum - score).abs() < 1e-12);
     }
 
     fn rw(cores: &[(u8, f64, usize)]) -> Rework {
@@ -3363,8 +3609,9 @@ mod delta_tests {
                         x0: 0.0, dx: rng.gen_range(1.0..500.0),
                         ys: (0..rng.gen_range(0..8usize)).map(|_| rng.gen_range(-3.0..3.0)).collect(),
                     }).collect(),
+                    loot: None,
                 }).collect();
-                cores.vm = Some(ValueModel { stack_value, stack_attr, terms });
+                cores.vm = Some(ValueModel { stack_value, stack_attr, stack_unscaled: Vec::new(), terms });
             }
             let cfg = &run.cfg;
             let mut sc = Scratch::new(&geom);

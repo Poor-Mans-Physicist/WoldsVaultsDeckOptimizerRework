@@ -213,11 +213,12 @@ fn parse_value_model(vm: &Option<PyValueModel>, n_stacks: usize) -> PyResult<Opt
                 curves: curves.iter().map(curve).collect(),
             });
         }
-        out.push(ValueTerm { weight: *weight, channels, extra: extra.iter().map(curve).collect() });
+        out.push(ValueTerm { weight: *weight, channels, extra: extra.iter().map(curve).collect(), loot: None });
     }
     Ok(Some(ValueModel {
         stack_value: values.clone(),
         stack_attr: attrs.iter().map(|&a| if a < 0 { NO_ATTR } else { a as u8 }).collect(),
+        stack_unscaled: Vec::new(),
         terms: out,
     }))
 }
