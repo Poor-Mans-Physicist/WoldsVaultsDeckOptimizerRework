@@ -668,10 +668,10 @@
   .row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
   .check { display: flex; align-items: center; gap: 6px; flex-grow: 1; font-size: 13px; cursor: pointer; min-width: 0; }
   .check span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .override { width: 100px; padding: 4px 6px; font-size: 13px; text-align: right; flex: none; }
-  .override[readonly] { color: var(--text-secondary); background: transparent; }
+  input.override { width: 100px; padding: 4px 6px; font-size: 13px; text-align: right; flex: none; }
+  input.override[readonly] { color: var(--text-secondary); background: transparent; }
   .override-wrap { position: relative; display: inline-flex; flex: none; }
-  .override-wrap .override { padding-right: 22px; }
+  .override-wrap input.override { padding-right: 22px; }
   .override-wrap .pct { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); font-size: 12px;
                         color: var(--text-muted); pointer-events: none; }
   .hint { font-size: 11px; color: var(--text-muted); padding: 0 0 4px 22px; line-height: 1.4; }
