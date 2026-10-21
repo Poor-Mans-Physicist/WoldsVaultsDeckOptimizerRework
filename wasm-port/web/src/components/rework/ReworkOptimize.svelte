@@ -19,6 +19,7 @@
   import { STAGES, STAGE_LABEL, type ReworkConfig, type RuleIn, type Stage, type StageBundle } from "../../lib/rework/types";
   import { dispatchTagged, workerPoolSize } from "../../lib/workerPool";
   import type { Placed } from "../../lib/rework/search";
+  import { loadCardArt, type CardArt } from "../../lib/rework/cardArt";
   import ReworkGrid from "./ReworkGrid.svelte";
   import ResultPanel from "./ResultPanel.svelte";
   import HowTo from "./HowTo.svelte";
@@ -72,6 +73,8 @@
   let viewDeck: Deck | null = $state(null);
   let ranking: { label: string; cores: string[]; score: number }[] = $state([]);
   let runInfo = $state("");
+  let art: CardArt = $state.raw({});
+  let viewTier = $state(5);
   let abort: AbortController | null = null;
 
   const curStage = $derived(mode === "global" ? stage : valueStage);
@@ -150,6 +153,7 @@
 
   onMount(async () => {
     load();
+    loadCardArt(baseUrl).then((a) => (art = a));
     if (!ownedCores.length) ownedCores = [...cfg.pool];
     for (const c of cfg.pool) if (coreValues[c] === undefined) coreValues[c] = roll(cfg, c, "max");
     if (!deckKey && decks.length) deckKey = (decks.find((d) => d.name === "The Rook Deck") ?? decks[0]).key;
@@ -297,6 +301,7 @@
                                        lanes: workerPoolSize() });
       view = await analyse(res.best, objective, curStage);
       viewDeck = res.best.spec.deck;
+      viewTier = b.card_tier;
       ranking = res.ranking;
       runInfo = `${res.jobs} searches in ${res.secs.toFixed(1)} s`;
     } catch (e) {
@@ -582,7 +587,7 @@
     <div class="card center-card">
       {#if viewDeck && view}
         <div class="title">{view.deckName}{view.implicits.length ? ` · ${view.implicits.map(modName).join(" + ")}` : ""}</div>
-        <ReworkGrid deck={viewDeck} slots={view.slots} added={structOn ? structural.addedSlots : []}
+        <ReworkGrid deck={viewDeck} slots={view.slots} {art} tier={viewTier} added={structOn ? structural.addedSlots : []}
           converted={structOn ? structural.convertedSlots : []} />
       {:else if effDeck}
         <div class="title">{effDeck.name}</div>

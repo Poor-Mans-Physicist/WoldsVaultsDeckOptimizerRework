@@ -1,0 +1,483 @@
+{
+ "cores": [
+  {
+   "key": "premium",
+   "name": "Premium",
+   "change": "nerfed",
+   "kind": "Scaling",
+   "mechanic": "Every card, Deluxe included, gets +r per Deluxe card in the deck.",
+   "lesser": "0.03",
+   "normal": "0.05–0.10",
+   "greater": "0.10–0.125",
+   "stacking": "Additive",
+   "note": "Was 0.15–0.25. Deluxe cards now count at their listed value (the old ×2 base was an NDM convention)."
+  },
+  {
+   "key": "pure",
+   "name": "Pure",
+   "change": "nerfed",
+   "kind": "Scaling",
+   "mechanic": "Stat or Evolution cards get +r per non-empty, non-Foil card in the deck.",
+   "lesser": "0.01",
+   "normal": "0.02–0.03",
+   "greater": "0.03–0.05",
+   "stacking": "Additive",
+   "note": "Now limited to Stat/Evolution cards as in code."
+  },
+  {
+   "key": "equilibrium",
+   "name": "Equilibrium",
+   "change": "nerfed",
+   "kind": "Scaling",
+   "mechanic": "Stat-group cards get +r per distinct colour in the deck (max 4).",
+   "lesser": "0.06",
+   "normal": "0.12–0.20",
+   "greater": "0.20–0.36",
+   "stacking": "Additive",
+   "note": "Now offered on every route, not just Shiny."
+  },
+  {
+   "key": "shiny",
+   "name": "Shiny",
+   "change": "nerfed",
+   "kind": "Flat",
+   "mechanic": "Foil cards get +r.",
+   "lesser": "0.2",
+   "normal": "0.3–0.6",
+   "greater": "0.6–0.9",
+   "stacking": "Additive",
+   "note": ""
+  },
+  {
+   "key": "steadfast",
+   "name": "Steadfast",
+   "change": "",
+   "kind": "Flat",
+   "mechanic": "Stat-group cards get +r.",
+   "lesser": "0.20",
+   "normal": "0.35–0.55",
+   "greater": "0.70–1.10",
+   "stacking": "Additive",
+   "note": "Unchanged."
+  },
+  {
+   "key": "color",
+   "name": "Crimson / Azure / Viridian / Golden",
+   "change": "nerfed",
+   "kind": "Flat",
+   "mechanic": "Cards of that colour get +r.",
+   "lesser": "0.05",
+   "normal": "0.1–0.3",
+   "greater": "0.4–0.6",
+   "stacking": "Additive",
+   "note": ""
+  },
+  {
+   "key": "void",
+   "name": "Void",
+   "change": "buffed",
+   "kind": "Scaling",
+   "mechanic": "Every card ×(1 + r per empty slot, empty Arcane slots included).",
+   "lesser": "0.02",
+   "normal": "0.03–0.05",
+   "greater": "0.06–0.08",
+   "stacking": "Multiplicative",
+   "note": "Now multiplicative."
+  },
+  {
+   "key": "archive",
+   "name": "Archive",
+   "change": "buffed",
+   "kind": "Scaling",
+   "mechanic": "Every card gets (1+r)^N − 1, N = Arcane cards in the deck.",
+   "lesser": "0.05",
+   "normal": "0.075–0.125",
+   "greater": "0.15–0.225",
+   "stacking": "Additive",
+   "note": "Higher top end."
+  },
+  {
+   "key": "empyreal",
+   "name": "Empyreal",
+   "change": "buffed",
+   "kind": "Slot",
+   "mechanic": "The k best slots (player's choice) get ×(1+r) on a Stat or Evolution card.",
+   "lesser": "×1.2, 1 slot",
+   "normal": "×1.2–1.3, 2 slots",
+   "greater": "×1.3–1.4, 3 slots",
+   "stacking": "Multiplicative",
+   "note": "Now multiplicative, and modeled as the best k slots."
+  },
+  {
+   "key": "arsenal",
+   "name": "Arsenal",
+   "change": "buffed",
+   "kind": "Tag",
+   "mechanic": "Offensive cards ×(1+r).",
+   "lesser": "×1.2",
+   "normal": "×1.3–1.4",
+   "greater": "×1.4–1.5",
+   "stacking": "Multiplicative",
+   "note": "Now multiplicative."
+  },
+  {
+   "key": "aegis",
+   "name": "Aegis",
+   "change": "reworked",
+   "kind": "Tag",
+   "mechanic": "Defensive cards ×(1 + r per orthogonal Defensive neighbour).",
+   "lesser": "0.05",
+   "normal": "0.075–0.125",
+   "greater": "0.125–0.175",
+   "stacking": "Multiplicative",
+   "note": ""
+  },
+  {
+   "key": "tool",
+   "name": "Tool",
+   "change": "reworked",
+   "kind": "Tag",
+   "mechanic": "Utility cards ×(1 + r per other Utility card in the deck).",
+   "lesser": "0.02",
+   "normal": "0.03–0.05",
+   "greater": "0.05–0.08",
+   "stacking": "Multiplicative",
+   "note": ""
+  },
+  {
+   "key": "natural",
+   "name": "Natural",
+   "change": "buffed",
+   "kind": "Tag",
+   "mechanic": "Physical cards get +r.",
+   "lesser": "0.5",
+   "normal": "0.75–1.1",
+   "greater": "1.1–1.4",
+   "stacking": "Additive",
+   "note": ""
+  },
+  {
+   "key": "fae",
+   "name": "Fae",
+   "change": "buffed",
+   "kind": "Tag",
+   "mechanic": "Magical cards get +r.",
+   "lesser": "0.5",
+   "normal": "0.75–1.1",
+   "greater": "1.1–1.4",
+   "stacking": "Additive",
+   "note": ""
+  },
+  {
+   "key": "jupiter",
+   "name": "Jupiter",
+   "change": "buffed",
+   "kind": "Dominance",
+   "mechanic": "Cards with the deck's most common group get +r (Stat excluded, alphabetical tie-break).",
+   "lesser": "0.3",
+   "normal": "0.4–0.6",
+   "greater": "0.6–0.85",
+   "stacking": "Additive",
+   "note": "Greed and Evolution count, so it often lands on Greed cards (which don't score)."
+  },
+  {
+   "key": "pluto",
+   "name": "Pluto",
+   "change": "buffed",
+   "kind": "Dominance",
+   "mechanic": "Cards with the deck's least common group ×(1+r). Every tag counts, colours don't.",
+   "lesser": "×1.2",
+   "normal": "×1.25–1.4",
+   "greater": "×1.4–1.6",
+   "stacking": "Multiplicative",
+   "note": "Now multiplicative."
+  },
+  {
+   "key": "nitwit",
+   "name": "Nitwit",
+   "change": "buffed",
+   "kind": "Slot",
+   "mechanic": "Arcane slots take regular cards and give them +r; Arcane cards are blocked.",
+   "lesser": "0.5",
+   "normal": "1–2",
+   "greater": "2–3",
+   "stacking": "Additive",
+   "note": ""
+  },
+  {
+   "key": "bazaar",
+   "name": "Bazaar",
+   "change": "buffed",
+   "kind": "Adjacency",
+   "mechanic": "+r if any of the 8 surrounding cards is a Resource card.",
+   "lesser": "0.3",
+   "normal": "0.4–0.6",
+   "greater": "0.6–0.8",
+   "stacking": "Additive",
+   "note": "Resource cards give 0 themselves."
+  },
+  {
+   "key": "talent",
+   "name": "Talent",
+   "change": "buffed",
+   "kind": "Adjacency",
+   "mechanic": "+r per surrounding Knack card.",
+   "lesser": "0.3",
+   "normal": "0.4–0.6",
+   "greater": "0.6–0.8",
+   "stacking": "Additive",
+   "note": "Knack cards don't yet grant talent levels in the model."
+  },
+  {
+   "key": "temporal",
+   "name": "Temporal",
+   "change": "",
+   "kind": "Adjacency",
+   "mechanic": "+r if any card in the 12-cell star-cross is a Temporal card.",
+   "lesser": "0.35",
+   "normal": "0.70–1.00",
+   "greater": "1.0–2.0",
+   "stacking": "Additive",
+   "note": "Unchanged. One 0-value Temporal card feeds up to 12 neighbours."
+  },
+  {
+   "key": "greed",
+   "name": "Greed",
+   "change": "new",
+   "kind": "Greed",
+   "mechanic": "A greed card whose target has 2+ greed cards on it adds +r to its own bonus.",
+   "lesser": "0.05",
+   "normal": "0.10–0.15",
+   "greater": "0.15–0.25",
+   "stacking": "Additive",
+   "note": "Lone greed cards get nothing."
+  }
+ ],
+ "other": [
+  {
+   "name": "Sparkling",
+   "kind": "Removed",
+   "note": "Removed in the rework."
+  },
+  {
+   "name": "Construction / Arcane",
+   "kind": "Structural",
+   "note": "Not in this run. In game both place their slots at random; the website lets you place them by hand."
+  },
+  {
+   "name": "Adept",
+   "kind": "Outside multiplier",
+   "note": "Ability levels on one Arcane slot; no stat effect."
+  },
+  {
+   "name": "Harvest / Fortune / Bounty",
+   "kind": "Outside multiplier",
+   "note": "Resource-card loot effects; no stat effect."
+  }
+ ],
+ "mods": [
+  {
+   "name": "Rook",
+   "deck": "The Rook Deck",
+   "mechanic": "Column-scaling cards count each card ×2.",
+   "value": "×2 count",
+   "stacking": "Positional frequency"
+  },
+  {
+   "name": "Bishop",
+   "deck": "The Bishop Deck",
+   "mechanic": "Diagonal-scaling cards count each card ×2.",
+   "value": "×2 count",
+   "stacking": "Positional frequency"
+  },
+  {
+   "name": "Pillager",
+   "deck": "The Pillager Deck",
+   "mechanic": "Surrounding-scaling cards count each card ×2.",
+   "value": "×2 count",
+   "stacking": "Positional frequency"
+  },
+  {
+   "name": "Runic",
+   "deck": "The Runic Deck",
+   "mechanic": "If the mirrored slot holds a same-colour card: ×(1 + 0.2 per shared tag, colour counts). The centre column matches itself.",
+   "value": "+0.2 per tag",
+   "stacking": "Multiplicative"
+  },
+  {
+   "name": "Cake",
+   "deck": "The Cake Deck",
+   "mechanic": "+r per row from the bottom (bottom row +1).",
+   "value": "+1.0 per row",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Snake",
+   "deck": "The Snake Deck",
+   "mechanic": "+r per card in the same-colour orthogonal chain beyond the first.",
+   "value": "+0.05 per link",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Cactus",
+   "deck": "The Cactus Deck",
+   "mechanic": "Cards that are both Offensive and Defensive get +r.",
+   "value": "+2.5",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Champion",
+   "deck": "The Champion Deck",
+   "mechanic": "Physical cards get +r.",
+   "value": "+1.5",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Belt",
+   "deck": "The Belt Deck",
+   "mechanic": "Utility cards get +r.",
+   "value": "+2.0",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Anvil",
+   "deck": "The Anvil Deck",
+   "mechanic": "Defensive cards get +r.",
+   "value": "+1.0",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Fairy",
+   "deck": "The Fairy Deck",
+   "mechanic": "Magical cards get +r.",
+   "value": "+0.5",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Treasure",
+   "deck": "The Treasure Deck",
+   "mechanic": "Stat-group cards get +r.",
+   "value": "+1.25",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Mutant",
+   "deck": "The Mutant Deck",
+   "mechanic": "Stat cards get +r per distinct group in the deck.",
+   "value": "+0.25 per group",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Puzzle",
+   "deck": "The Puzzle Deck",
+   "mechanic": "+r per orthogonal neighbour of a different colour.",
+   "value": "+1.0 per neighbour",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Idona",
+   "deck": "Idona's Deck",
+   "mechanic": "Red cards get +r.",
+   "value": "+1.25",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Velara",
+   "deck": "The Velara Deck",
+   "mechanic": "Green cards get +r.",
+   "value": "+1.25",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Tenos",
+   "deck": "The Tenos Deck",
+   "mechanic": "Blue cards get +r.",
+   "value": "+1.25",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Wendarr",
+   "deck": "The Wendarr Deck",
+   "mechanic": "Yellow cards get +r.",
+   "value": "+1.25",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Ornate",
+   "deck": "The Ornate Deck",
+   "mechanic": "Red Foil cards get +r.",
+   "value": "+1.75",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Gilded",
+   "deck": "The Gilded Deck",
+   "mechanic": "Yellow Foil cards get +r.",
+   "value": "+1.5",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Living",
+   "deck": "The Living Deck",
+   "mechanic": "Green Foil cards get +r.",
+   "value": "+2.0",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Shadow",
+   "deck": "The Shadow Deck",
+   "mechanic": "Built-in Void: every card ×(1 + r per empty slot).",
+   "value": "×(1 + 0.04 per empty)",
+   "stacking": "Multiplicative"
+  },
+  {
+   "name": "Skull",
+   "deck": "The Skull Deck",
+   "mechanic": "+r per surrounding Knack card.",
+   "value": "+0.5 per Knack",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Merchant",
+   "deck": "Merchant's Deck",
+   "mechanic": "+r per Resource card in the same column.",
+   "value": "+1.0 per Resource",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Villager",
+   "deck": "The Villager Deck",
+   "mechanic": "Built-in Nitwit: Arcane slots take regular cards at +r; Arcane cards blocked.",
+   "value": "+3.0",
+   "stacking": "Additive"
+  },
+  {
+   "name": "Extended",
+   "deck": "Extended Deck",
+   "mechanic": "Temporal cards last ×3 as long.",
+   "value": "×3 time",
+   "stacking": "Outside multiplier"
+  },
+  {
+   "name": "Arcane",
+   "deck": "The Arcane Deck",
+   "mechanic": "+2 ability levels on Arcane cards.",
+   "value": "+2 levels",
+   "stacking": "Outside multiplier"
+  },
+  {
+   "name": "Relic",
+   "deck": "The Relic Deck",
+   "mechanic": "+2 completion-crate tiers with 4+ Resource cards.",
+   "value": "+2 tiers",
+   "stacking": "Outside multiplier"
+  },
+  {
+   "name": "Mystery",
+   "deck": "The Mystery Deck",
+   "mechanic": "Two random modifiers from the pool, each at 75% strength (×1.75 count, +75% per row, 0.15 per Runic tag).",
+   "value": "75%",
+   "stacking": "Each keeps its class"
+  }
+ ]
+}

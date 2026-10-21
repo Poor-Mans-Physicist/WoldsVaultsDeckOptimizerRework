@@ -41,7 +41,7 @@ import { buildDeck } from "./deck";
 import type { RawDeck } from "./deck";
 import { CardType, type Placed } from "./types";
 
-export type Tab = "optimize" | "preview" | "build" | "snapshots";
+export type Tab = "optimize" | "cores" | "preview" | "build" | "snapshots";
 
 export interface CoreRowState {
   enabled:  boolean;

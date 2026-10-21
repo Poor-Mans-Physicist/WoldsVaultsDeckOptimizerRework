@@ -7,10 +7,14 @@
   import { slotBg, COLOR_HEX, TYPE_GLYPH, ARCANE_BORDER } from "../../lib/palette";
   import type { CardType, Color, Position } from "../../lib/types";
   import { formatStat, sourceLabel, statLabel, type SlotView } from "../../lib/rework/results";
+  import { cardImages, type CardArt } from "../../lib/rework/cardArt";
 
   interface Props {
     deck: Deck;
     slots: SlotView[] | null;
+    /** Card textures (cardArt.ts); empty draws plain tiles. */
+    art?: CardArt;
+    tier?: number;
     candidates?: Position[];
     added?: Position[];
     converted?: Position[];
@@ -20,7 +24,7 @@
     onConvert?: (p: Position) => void;
     onUnconvert?: (p: Position) => void;
   }
-  let { deck, slots, candidates = [], added = [], converted = [], canConvert = false,
+  let { deck, slots, art = {}, tier = 5, candidates = [], added = [], converted = [], canConvert = false,
         onPlace, onRemove, onConvert, onUnconvert }: Props = $props();
 
   const CELL = 58;
@@ -66,6 +70,9 @@
     return { top: "", bottom: "" };
   }
 
+  const ARROW: Record<string, string> = { dir_greed_up: "▲", dir_greed_down: "▼", dir_greed_left: "◀", dir_greed_right: "▶" };
+  const POS_GLYPH: Record<string, string> = { row: "R", col: "C", surr: "S", diag: "X" };
+
   function clickCell(cell: (typeof cells)[number]) {
     if (canConvert && !cell.arcane && onConvert) onConvert([cell.pos[0], cell.pos[1]]);
   }
@@ -73,6 +80,10 @@
   function contextCell(e: MouseEvent, cell: (typeof cells)[number]) {
     if (cell.converted && onUnconvert) { e.preventDefault(); onUnconvert([cell.pos[0], cell.pos[1]]); return; }
     if (cell.added && onRemove) { e.preventDefault(); onRemove([cell.pos[0], cell.pos[1]]); }
+  }
+
+  function imgs(v: SlotView) {
+    return cardImages(art, v.t, v.color, v.ident, tier);
   }
 
   let hover: number | null = $state(null);
@@ -116,7 +127,7 @@
       style:top="{cell.r * (CELL + GAP)}px"
       style:width="{CELL}px"
       style:height="{CELL}px"
-      style:background={v ? slotBg(v.t as CardType) : "var(--bg-empty-slot)"}
+      style:background={v && !imgs(v).base ? slotBg(v.t as CardType) : v ? "#1a2233" : "var(--bg-empty-slot)"}
       style:border-color={cell.arcane ? ARCANE_BORDER : cell.added ? "#94A3B8" : "transparent"}
       role="button"
       tabindex="-1"
@@ -127,7 +138,16 @@
       onmouseenter={() => (hover = cell.i)}
       onmouseleave={() => (hover = null)}
     >
-      {#if v && v.t !== "dead"}
+      {#if v && v.t !== "dead" && imgs(v).base}
+        {@const im = imgs(v)}
+        <img class="base" src={im.base} alt="" />
+        {#if im.icon}<img class="ic" src={im.icon} alt="" />{/if}
+        {#if ARROW[v.t]}<span class="ar">{ARROW[v.t]}</span>{/if}
+        {#if POS_GLYPH[v.t]}<span class="pg">{POS_GLYPH[v.t]}</span>{/if}
+        {#if v.ident?.kind === "deluxe"}<span class="dlx"></span>{/if}
+        {#if v.ident?.grant}<span class="lv">+{v.ident.grant[2]}</span>{/if}
+        {#if line.bottom && !v.ident?.grant}<span class="nv">{line.bottom}</span>{/if}
+      {:else if v && v.t !== "dead"}
         {#if v.color && v.t !== "arcane"}
           <span class="cbar" style:background={COLOR_HEX[v.color as Color] ?? "transparent"}></span>
         {/if}
@@ -191,6 +211,15 @@
     color: #F1F5F9; font-size: 18px; font-weight: 600; cursor: pointer; opacity: .55; padding: 0;
   }
   .cand:hover { opacity: 1; }
+  .base { position: absolute; left: 1px; top: 1px; width: 52px; height: 52px; image-rendering: pixelated; }
+  .ic { position: absolute; left: 13px; top: 10px; width: 28px; height: 28px; image-rendering: pixelated; }
+  .ar { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; color: #fde68a;
+        text-shadow: 0 1px 3px #000; }
+  .pg { position: absolute; left: 3px; top: 1px; font-size: 10px; font-weight: 800; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+  .lv { position: absolute; right: 3px; top: 1px; font-size: 11px; font-weight: 800; color: #fde68a; text-shadow: 0 0 3px #000, 0 0 2px #000; }
+  .nv { position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 10px; font-weight: 700; color: #fff;
+        text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; overflow: hidden; }
+  .dlx { position: absolute; inset: 0; border-radius: 5px; box-shadow: inset 0 0 0 2px rgba(250, 204, 21, .6); pointer-events: none; }
   .cbar { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
   .glyph { position: absolute; top: 2px; right: 4px; font-size: 11px; font-weight: 700; opacity: 0.7; }
   .glyph.dead { left: 0; right: 0; text-align: center; top: 18px; opacity: 0.4; }

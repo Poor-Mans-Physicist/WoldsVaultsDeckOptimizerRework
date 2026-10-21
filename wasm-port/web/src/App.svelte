@@ -15,6 +15,7 @@
     captureSnapshot, saveSnapshot, restoreSnapshot, reloadSnapshots,
     defaultGreedMult, effectiveCfg, clearStructReport,
   } from "./lib/state.svelte";
+  import type { Tab } from "./lib/state.svelte";
   import { runStructural, hasStructCache, tierFor } from "./lib/structuralOpt";
   import type { TaggedRunInput } from "./lib/tagged";
   import { loadConfigBundle, getMode } from "./lib/config";
@@ -53,6 +54,7 @@
   import UnsavedChangesDialog   from "./components/UnsavedChangesDialog.svelte";
   import SnapshotsTab           from "./components/SnapshotsTab.svelte";
   import ReworkOptimize         from "./components/rework/ReworkOptimize.svelte";
+  import CoresTab               from "./components/rework/CoresTab.svelte";
   import SaveSnapshotDialog     from "./components/SaveSnapshotDialog.svelte";
   import OptimizerSettings      from "./components/OptimizerSettings.svelte";
   import TargetedPanel          from "./components/TargetedPanel.svelte";
@@ -231,7 +233,7 @@
     unsavedAction = null;
   }
 
-  function switchTab(next: "optimize" | "preview" | "build" | "snapshots") {
+  function switchTab(next: Tab) {
     if (app.tab === next) return;
     requestNavigate(() => { app.tab = next; });
   }
@@ -587,8 +589,8 @@
         class:active={app.tab === "optimize"}
         onclick={() => switchTab("optimize")}>Optimize</button>
       <button type="button"
-        class:active={app.tab === "build"}
-        onclick={() => switchTab("build")}>Build</button>
+        class:active={app.tab === "cores"}
+        onclick={() => switchTab("cores")}>Cores</button>
       <button type="button"
         class:active={app.tab === "snapshots"}
         onclick={() => switchTab("snapshots")}>Snapshots</button>
@@ -611,7 +613,13 @@
   <main class="layout-wide">
     <SnapshotsTab onLoad={onLoadSnapshot} />
   </main>
-{:else if app.tab === "optimize"}
+{:else if app.tab === "cores"}
+  {#if app.bundle?.rework}
+    <CoresTab cfg={app.bundle.rework} {baseUrl} />
+  {:else}
+    <div class="banner err">config.json has no rework section; rebuild the data (wasm-port/scripts/build_data.py).</div>
+  {/if}
+{:else if app.tab === "optimize" || app.tab === "build" || app.tab === "preview"}
   {#if app.bundle?.rework}
     <ReworkOptimize decks={app.decks} catalog={implicitCatalog()} cfg={app.bundle.rework} {baseUrl} deckmod={app.cfg?.deckmod ?? 0} />
   {:else}
