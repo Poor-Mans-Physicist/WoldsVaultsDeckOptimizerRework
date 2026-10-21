@@ -291,13 +291,15 @@ fn curve(c: &CurveIn) -> R<Curve> {
     Ok(Curve { x0: c.x0, dx: c.dx, ys: c.ys.clone() })
 }
 
-fn dense(sparse: &[(usize, CurveIn)], n_attr: usize) -> R<Vec<Curve>> {
-    let mut out: Vec<Curve> = (0..n_attr).map(|_| Curve { x0: 0.0, dx: 1.0, ys: Vec::new() }).collect();
-    for (a, c) in sparse {
+fn sparse(curves: &[(usize, CurveIn)], n_attr: usize) -> R<Vec<(usize, Curve)>> {
+    let mut out = Vec::with_capacity(curves.len());
+    for (a, c) in curves {
         if *a >= n_attr {
             return Err(format!("value_model: curve attribute {a} out of range ({n_attr})"));
         }
-        out[*a] = curve(c)?;
+        if !c.ys.is_empty() {
+            out.push((*a, curve(c)?));
+        }
     }
     Ok(out)
 }
@@ -333,9 +335,9 @@ fn value_model(vm: &ValueModelIn, n_stacks: usize) -> R<ValueModel> {
     for t in &vm.terms {
         let mut channels = Vec::with_capacity(t.channels.len());
         for ch in &t.channels {
-            channels.push(ValueChannel { base: ch.base, curves: dense(&ch.curves, vm.n_attr)? });
+            channels.push(ValueChannel { base: ch.base, curves: sparse(&ch.curves, vm.n_attr)? });
         }
-        let extra = if t.extra.is_empty() { Vec::new() } else { dense(&t.extra, vm.n_attr)? };
+        let extra = sparse(&t.extra, vm.n_attr)?;
         let loot = match &t.loot { Some(l) => Some(loot_term(l, vm.n_attr)?), None => None };
         terms.push(ValueTerm { weight: t.weight, channels, extra, loot });
     }

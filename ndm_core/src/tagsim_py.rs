@@ -192,7 +192,10 @@ fn parse_value_model(vm: &Option<PyValueModel>, n_stacks: usize) -> PyResult<Opt
         return bad(format!("value_model: attribute index {} out of range", a));
     }
     let mut out = Vec::with_capacity(terms.len());
-    let curve = |(x0, dx, ys): &PyCurve| Curve { x0: *x0, dx: *dx, ys: ys.clone() };
+    let sparse = |cs: &[PyCurve]| -> Vec<(usize, Curve)> {
+        cs.iter().enumerate().filter(|(_, (_, _, ys))| !ys.is_empty())
+            .map(|(a, (x0, dx, ys))| (a, Curve { x0: *x0, dx: *dx, ys: ys.clone() })).collect()
+    };
     for (weight, chans, extra) in terms {
         if !extra.is_empty() && extra.len() != *n_attr {
             return bad(format!("value_model: {} extra curves, want 0 or {}", extra.len(), n_attr));
@@ -208,12 +211,9 @@ fn parse_value_model(vm: &Option<PyValueModel>, n_stacks: usize) -> PyResult<Opt
             if curves.iter().any(|(_, dx, ys)| !ys.is_empty() && !(*dx > 0.0)) {
                 return bad("value_model: a non-empty curve needs dx > 0".into());
             }
-            channels.push(ValueChannel {
-                base: *base,
-                curves: curves.iter().map(curve).collect(),
-            });
+            channels.push(ValueChannel { base: *base, curves: sparse(curves) });
         }
-        out.push(ValueTerm { weight: *weight, channels, extra: extra.iter().map(curve).collect(), loot: None });
+        out.push(ValueTerm { weight: *weight, channels, extra: sparse(extra), loot: None });
     }
     Ok(Some(ValueModel {
         stack_value: values.clone(),

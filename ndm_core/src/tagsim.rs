@@ -272,7 +272,7 @@ pub struct ValueModel {
 pub struct ValueTerm {
     pub weight: f64,
     pub channels: Vec<ValueChannel>,
-    pub extra: Vec<Curve>,
+    pub extra: Vec<(usize, Curve)>,
     pub loot: Option<LootTerm>,
 }
 
@@ -358,10 +358,11 @@ impl LootTerm {
     }
 }
 
+/// Curves are sparse: (attribute index, curve) for the attributes that move this channel.
 #[derive(Clone, Debug)]
 pub struct ValueChannel {
     pub base: f64,
-    pub curves: Vec<Curve>,
+    pub curves: Vec<(usize, Curve)>,
 }
 
 #[derive(Clone, Debug)]
@@ -372,7 +373,7 @@ pub struct Curve {
 }
 
 pub const NO_ATTR: u8 = u8::MAX;
-pub const MAX_VALUE_ATTRS: usize = 64;
+pub const MAX_VALUE_ATTRS: usize = 128;
 
 impl Curve {
     #[inline(always)]
@@ -406,11 +407,11 @@ impl ValueModel {
             let mut lo = f64::INFINITY;
             for ch in &t.channels {
                 let mut v = ch.base;
-                for (a, c) in ch.curves.iter().enumerate() { v += c.at(x[a]); }
+                for (a, c) in &ch.curves { v += c.at(x[*a]); }
                 if v < lo { lo = v; }
             }
             if !lo.is_finite() { lo = 0.0; }
-            for (a, c) in t.extra.iter().enumerate() { lo += c.at(x[a]); }
+            for (a, c) in &t.extra { lo += c.at(x[*a]); }
             if let Some(l) = &t.loot { lo += l.eval(x[l.iq_attr], x[l.ir_attr]).0; }
             s += t.weight * lo;
         }
@@ -3287,8 +3288,8 @@ mod rework_tests {
         run
     }
 
-    fn linear(n_attr: usize) -> Vec<Curve> {
-        (0..n_attr).map(|_| Curve { x0: 0.0, dx: 1000.0, ys: vec![0.0, 1000.0] }).collect()
+    fn linear(n_attr: usize) -> Vec<(usize, Curve)> {
+        (0..n_attr).map(|a| (a, Curve { x0: 0.0, dx: 1000.0, ys: vec![0.0, 1000.0] })).collect()
     }
 
     fn loot(base_q: f64, base_r: f64, paths: Vec<(f64, f64)>) -> LootTerm {
@@ -3600,15 +3601,15 @@ mod delta_tests {
                     weight: rng.gen_range(0.1..1.0),
                     channels: (0..rng.gen_range(1..3usize)).map(|_| ValueChannel {
                         base: rng.gen_range(-2.0..2.0),
-                        curves: (0..n_attr).map(|_| Curve {
+                        curves: (0..n_attr).map(|a| (a, Curve {
                             x0: 0.0, dx: rng.gen_range(1.0..500.0),
                             ys: (0..16).map(|_| rng.gen_range(-3.0..3.0)).collect(),
-                        }).collect(),
+                        })).collect(),
                     }).collect(),
-                    extra: (0..n_attr).map(|_| Curve {
+                    extra: (0..n_attr).map(|a| (a, Curve {
                         x0: 0.0, dx: rng.gen_range(1.0..500.0),
                         ys: (0..rng.gen_range(0..8usize)).map(|_| rng.gen_range(-3.0..3.0)).collect(),
-                    }).collect(),
+                    })).collect(),
                     loot: None,
                 }).collect();
                 cores.vm = Some(ValueModel { stack_value, stack_attr, stack_unscaled: Vec::new(), terms });
