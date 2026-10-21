@@ -229,9 +229,12 @@ def main() -> None:
         raise RuntimeError(f"No enabled decks found in any mode under {_DECKS_DIR}")
 
     # config.json: emit every mode resolved, plus a default-mode marker.
+    if "rework" not in raw_cfg:
+        raise RuntimeError("config.yaml must declare the 'rework' block (stage rules for the rework site).")
     config_blob: Dict[str, Any] = {
         "default_mode": "wolds",
         "modes":        modes,
+        "rework":       raw_cfg["rework"],
     }
     (out_dir / "config.json").write_text(
         json.dumps(config_blob, indent=2, sort_keys=False) + "\n",

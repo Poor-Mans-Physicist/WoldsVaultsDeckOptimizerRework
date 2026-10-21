@@ -1,0 +1,29 @@
+{
+ "meta": {
+  "ledger_commit": "629e57d",
+  "results_generated": "2026-10-19 22:01",
+  "bundle_generated": "2026-10-20 20:21"
+ },
+ "stages": {
+  "early": {
+   "file": "early.json",
+   "builds": 44,
+   "bytes": 618692
+  },
+  "mid": {
+   "file": "mid.json",
+   "builds": 44,
+   "bytes": 639115
+  },
+  "end": {
+   "file": "end.json",
+   "builds": 44,
+   "bytes": 671440
+  },
+  "max": {
+   "file": "max.json",
+   "builds": 44,
+   "bytes": 667259
+  }
+ }
+}
