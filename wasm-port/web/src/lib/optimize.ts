@@ -17,7 +17,7 @@
 // all three sequentially. The parallel orchestrator lives in workerClient.ts.
 
 import init, {
-  runSaInventory, runSaTagged, scoreTagged,
+  runSaInventory, runSaTagged, scoreTagged, explainTagged, lootEval,
   constructionEnumerate, constructionEval, constructionChain,
 } from "../wasm/ndm_core";
 import wasmUrl from "../wasm/ndm_core_bg.wasm?url";
@@ -124,9 +124,30 @@ export async function initWasm(): Promise<void> {
 
 // ── Optimizer 2.0 kernel entries ─────────────────────────────────────────────
 
-/** Raw per-slot card as the tagged kernel returns it. */
+/** Raw per-slot card as the tagged kernel returns it (stack = -1 for none). */
 export interface RawTaggedPlaced {
-  t: string; color: string; scale_color: string; groups: string[];
+  t: string; color: string; scale_color: string; groups: string[]; stack?: number;
+}
+
+/** Per-slot rework breakdown (kernel explainTagged): term = base x (1 + sum adds) x prod mults x boost x empyreal. */
+export interface ExplainSlot {
+  term: number; base: number; adds: [number, number][]; mults: [number, number][]; boost: number; empyreal: number;
+}
+
+/** Rework breakdown of a fixed assignment (main thread). */
+export async function explainTaggedPayload(
+  payload: Record<string, unknown>,
+): Promise<{ score: number; slots: ExplainSlot[] }> {
+  await initWasm();
+  return explainTagged(payload) as { score: number; slots: ExplainSlot[] };
+}
+
+/** Loot objective at given deck IQ / IR totals (main thread). */
+export async function lootEvalPayload(
+  input: { loot: unknown; iq: number; ir: number },
+): Promise<{ score: number; path: number }> {
+  await initWasm();
+  return lootEval(input) as { score: number; path: number };
 }
 
 /** One tagged SA run (a candidate combo × a restart chunk). Worker-side. */

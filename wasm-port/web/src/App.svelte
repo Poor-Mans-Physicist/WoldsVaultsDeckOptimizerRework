@@ -52,6 +52,7 @@
   import ExportJsonDialog       from "./components/ExportJsonDialog.svelte";
   import UnsavedChangesDialog   from "./components/UnsavedChangesDialog.svelte";
   import SnapshotsTab           from "./components/SnapshotsTab.svelte";
+  import ReworkOptimize         from "./components/rework/ReworkOptimize.svelte";
   import SaveSnapshotDialog     from "./components/SaveSnapshotDialog.svelte";
   import OptimizerSettings      from "./components/OptimizerSettings.svelte";
   import TargetedPanel          from "./components/TargetedPanel.svelte";
@@ -579,15 +580,12 @@
 </script>
 
 <header class="app-header">
-  <h1>Wold's Vaults — Deck Optimizer</h1>
+  <h1>Wold's Vaults — Deck Optimizer <span class="sub-title">core rework</span></h1>
   <div class="header-right">
     <nav class="tabs">
       <button type="button"
         class:active={app.tab === "optimize"}
         onclick={() => switchTab("optimize")}>Optimize</button>
-      <button type="button"
-        class:active={app.tab === "preview"}
-        onclick={() => switchTab("preview")}>Preview</button>
       <button type="button"
         class:active={app.tab === "build"}
         onclick={() => switchTab("build")}>Build</button>
@@ -595,7 +593,7 @@
         class:active={app.tab === "snapshots"}
         onclick={() => switchTab("snapshots")}>Snapshots</button>
     </nav>
-    {#if app.bundle}
+    {#if app.bundle && app.tab === "build"}
       <ModeToggle
         bind:mode={app.mode}
         modes={Object.keys(app.bundle.modes)}
@@ -613,6 +611,12 @@
   <main class="layout-wide">
     <SnapshotsTab onLoad={onLoadSnapshot} />
   </main>
+{:else if app.tab === "optimize"}
+  {#if app.bundle?.rework}
+    <ReworkOptimize decks={app.decks} catalog={implicitCatalog()} cfg={app.bundle.rework} {baseUrl} />
+  {:else}
+    <div class="banner err">config.json has no rework section; rebuild the data (wasm-port/scripts/build_data.py).</div>
+  {/if}
 {:else}
   <main class="layout">
     <!-- ── Left: controls (shared) ────────────────────────────────── -->
@@ -666,7 +670,7 @@
         {/if}
       </section>
 
-      {#if app.tab === "optimize" || app.tab === "build"}
+      {#if app.tab === "build"}
         <OptimizerSettings onRun={run} onSaveSnapshot={openSaveSnapshot}
           structStatus={structStatus.state} structNote={structStatus.note}
           onStructRun={runStructuralOpt} />
@@ -680,7 +684,7 @@
 
     <!-- ── Center: deck grid + result bar ─────────────────────────── -->
     <section class="col-center">
-      {#if shownResult && (app.tab === "optimize" || app.tab === "build")}
+      {#if shownResult && app.tab === "build"}
         {@const r = shownResult}
         {@const delta = Math.abs(r.wasmScore - r.tsScore)}
         {@const ok = delta <= VERIFY_TOL}
@@ -756,7 +760,7 @@
     </section>
 
     <!-- ── Right: mode-dependent side panel (spec §9.3) ─────────────── -->
-    {#if app.tab === "optimize" || app.tab === "build"}
+    {#if app.tab === "build"}
       <aside class="col-right">
         {#if app.optMode === OptimizerMode.MAX}
           <MaxReadout />
@@ -870,6 +874,8 @@
     background: var(--bg-page);
     color: var(--text-primary);
   }
+
+  .sub-title { font-size: 0.6em; font-weight: 500; color: var(--text-secondary); margin-left: 6px; }
 
   .app-header {
     display: flex;

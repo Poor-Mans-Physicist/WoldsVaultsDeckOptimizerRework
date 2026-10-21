@@ -84,6 +84,8 @@ export interface ResolvedConfig {
 export interface ConfigBundle {
   default_mode: string;
   modes: Record<string, ResolvedConfig>;
+  /** Deck/core rework stage rules (DeckFAST config.yaml `rework`). */
+  rework?: import("./rework/types").ReworkConfig;
 }
 
 let _bundle: ConfigBundle | null = null;

@@ -23,6 +23,8 @@ export type AllowedTypes = Partial<Record<"evo" | "typeless" | "deluxe" | "greed
 export interface StackOptions {
   levelCards: boolean;
   allowed?:   AllowedTypes;
+  /** Colours to offer stat cards in (Exact: every colour); default by the deck's rules. */
+  colors?:    string[];
 }
 
 export interface StackSet {
@@ -40,7 +42,7 @@ export function stacksFor(
 ): StackSet {
   const shiny = cores.includes("shiny");
   const multi = cores.includes("equilibrium") || imps.some((t) => t.kind === "color_mismatch");
-  const colors: string[] = multi ? [...COLORS] : [deckColor(imps)];
+  const colors: string[] = opts.colors ?? (multi ? [...COLORS] : [deckColor(imps)]);
   const ok = (k: keyof AllowedTypes) => opts.allowed?.[k] !== false;
   const stacks: StackIn[] = [];
   const ident: StackIdent[] = [];

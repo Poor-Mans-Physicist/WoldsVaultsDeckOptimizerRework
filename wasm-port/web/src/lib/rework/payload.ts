@@ -28,6 +28,13 @@ export interface JobContext {
   allowed?:   AllowedTypes;
   /** Targeted: the player's tag rules, added to the stage limits. */
   extraRules?: RuleIn[];
+  /** Exact: the player's cards, stack key (stackKey) -> count. Only these stacks are offered. */
+  exact?:     Map<string, number>;
+}
+
+/** Exact-mode key of a stack: kind, card id, card type and colour. */
+export function stackKey(id: StackIdent): string {
+  return `${id.kind}|${id.id}|${id.t}|${id.color}`;
 }
 
 export interface BuiltJob {
@@ -43,8 +50,15 @@ export function buildJob(spec: JobSpec, ctx: JobContext): BuiltJob {
   const { deck } = spec;
   const { imps, nitwit: villager } = deckImplicits(spec.implicitKeys, spec.mystery, ctx.rules, ctx.catalog);
   const nitwit = villager > 0 || spec.cores.includes("nitwit");
-  const { stacks, ident } = stacksFor(ctx.bundle, spec.cores, deck, imps, nitwit, ctx.rules,
-                                      { levelCards: ctx.levelCards, allowed: ctx.allowed });
+  const all = stacksFor(ctx.bundle, spec.cores, deck, imps, nitwit, ctx.rules,
+                       { levelCards: ctx.levelCards, allowed: ctx.allowed,
+                         colors: ctx.exact ? ["red", "green", "blue", "yellow"] : undefined });
+  let { stacks, ident } = all;
+  if (ctx.exact) {
+    const keep = ident.map((id, i) => [i, ctx.exact!.get(stackKey(id))] as const).filter(([, n]) => (n ?? 0) > 0);
+    stacks = keep.map(([i, n]) => ({ ...all.stacks[i], count: n! }));
+    ident = keep.map(([i]) => all.ident[i]);
+  }
   const built = buildObjective(ctx.bundle, ctx.objective, ident, ctx.stage);
   const cs = coreSpec(spec.cores, ctx.rules, deckColor(imps));
   const nit = nitwitValue(spec.cores, ctx.rules, villager);
@@ -68,7 +82,8 @@ export function buildJob(spec: JobSpec, ctx: JobContext): BuiltJob {
     value_model: built.valueModel,
     n_iter: 0, restarts: 1,
   };
-  return { payload, ident, imps, built, coreSpec: cs, nitwit: nit };
+  // Plain data only: deck geometry and bundle curves may arrive as reactive proxies, which workers cannot receive.
+  return { payload: JSON.parse(JSON.stringify(payload)), ident, imps, built, coreSpec: cs, nitwit: nit };
 }
 
 /** A search request from a built job: budget, restarts, seed, optional phase 2. */
