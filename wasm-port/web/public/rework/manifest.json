@@ -1,29 +1,29 @@
 {
  "meta": {
-  "ledger_commit": "98b2c8e",
-  "results_generated": "2026-10-19 22:01",
-  "bundle_generated": "2026-10-21 02:38"
+  "ledger_commit": "fad0960",
+  "results_generated": "2026-10-21 04:35",
+  "bundle_generated": "2026-10-21 04:55"
  },
  "stages": {
   "early": {
    "file": "early.json",
    "builds": 44,
-   "bytes": 630289
+   "bytes": 626490
   },
   "mid": {
    "file": "mid.json",
    "builds": 44,
-   "bytes": 651749
+   "bytes": 634294
   },
   "end": {
    "file": "end.json",
    "builds": 44,
-   "bytes": 684095
+   "bytes": 682520
   },
   "max": {
    "file": "max.json",
    "builds": 44,
-   "bytes": 680261
+   "bytes": 694925
   }
  }
 }
