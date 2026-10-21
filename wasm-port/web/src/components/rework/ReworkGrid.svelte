@@ -1,19 +1,31 @@
 <script lang="ts">
   // The deck as a fixed grid of equal cells: card type, card colour, the stat it carries and its value after the
-  // deck's multipliers. Hovering a card shows its breakdown in a fixed-width popup (no layout shift).
+  // deck's multipliers. Hovering a card shows its breakdown in a fixed-width popup (no layout shift). With the
+  // structural cores on, "+" tiles add Construction slots (right-click an added slot to remove it) and clicking a
+  // regular slot converts it to arcane (right-click to revert).
   import type { Deck } from "../../lib/deck";
   import { slotBg, COLOR_HEX, TYPE_GLYPH, ARCANE_BORDER } from "../../lib/palette";
-  import type { CardType, Color } from "../../lib/types";
+  import type { CardType, Color, Position } from "../../lib/types";
   import { formatStat, sourceLabel, statLabel, type SlotView } from "../../lib/rework/results";
 
   interface Props {
     deck: Deck;
     slots: SlotView[] | null;
+    candidates?: Position[];
+    added?: Position[];
+    converted?: Position[];
+    canConvert?: boolean;
+    onPlace?: (p: Position) => void;
+    onRemove?: (p: Position) => void;
+    onConvert?: (p: Position) => void;
+    onUnconvert?: (p: Position) => void;
   }
-  let { deck, slots }: Props = $props();
+  let { deck, slots, candidates = [], added = [], converted = [], canConvert = false,
+        onPlace, onRemove, onConvert, onUnconvert }: Props = $props();
 
   const CELL = 58;
   const GAP = 4;
+  const key = (p: readonly [number, number]) => `${p[0]},${p[1]}`;
 
   const SHORT: Record<string, string> = {
     "Ability Power": "AP", "Area of Effect": "AOE", "Armor": "ARM", "Attack Speed": "AS", "Cooldown Reduction": "CDR",
@@ -23,14 +35,19 @@
   };
 
   const bounds = $derived.by(() => {
-    const rows = deck.slots.map((s) => s[0]), cols = deck.slots.map((s) => s[1]);
+    const all = [...deck.slots, ...candidates];
+    const rows = all.map((s) => s[0]), cols = all.map((s) => s[1]);
     return { r0: Math.min(...rows), c0: Math.min(...cols), nr: Math.max(...rows) - Math.min(...rows) + 1,
              nc: Math.max(...cols) - Math.min(...cols) + 1 };
   });
 
+  const addedSet = $derived(new Set(added.map(key)));
+  const convertedSet = $derived(new Set(converted.map(key)));
+
   const cells = $derived.by(() => {
     const arc = new Set(deck.arcaneSlotIndices);
-    return deck.slots.map((s, i) => ({ i, r: s[0] - bounds.r0, c: s[1] - bounds.c0, arcane: arc.has(i),
+    return deck.slots.map((s, i) => ({ i, pos: s, r: s[0] - bounds.r0, c: s[1] - bounds.c0, arcane: arc.has(i),
+                                       added: addedSet.has(key(s)), converted: convertedSet.has(key(s)),
                                        view: slots ? slots[i] : null }));
   });
 
@@ -38,8 +55,8 @@
     if (!v || v.t === "dead") return { top: "", bottom: "" };
     const id = v.ident;
     if (id?.grant) {
-      const key = id.grant[1].replace(/_/g, " ");
-      return { top: key.length > 7 ? key.slice(0, 6) + "." : key, bottom: `+${id.grant[2]} lv` };
+      const k = id.grant[1].replace(/_/g, " ");
+      return { top: k.length > 7 ? k.slice(0, 6) + "." : k, bottom: `+${id.grant[2]} lv` };
     }
     if (id?.attr) {
       const lab = statLabel(id.attr);
@@ -47,6 +64,15 @@
     }
     if (id?.kind === "battery") return { top: id.id.slice(0, 5), bottom: "" };
     return { top: "", bottom: "" };
+  }
+
+  function clickCell(cell: (typeof cells)[number]) {
+    if (canConvert && !cell.arcane && onConvert) onConvert([cell.pos[0], cell.pos[1]]);
+  }
+
+  function contextCell(e: MouseEvent, cell: (typeof cells)[number]) {
+    if (cell.converted && onUnconvert) { e.preventDefault(); onUnconvert([cell.pos[0], cell.pos[1]]); return; }
+    if (cell.added && onRemove) { e.preventDefault(); onRemove([cell.pos[0], cell.pos[1]]); }
   }
 
   let hover: number | null = $state(null);
@@ -65,6 +91,18 @@
 </script>
 
 <div class="grid-wrap" style:width="{bounds.nc * (CELL + GAP)}px" style:height="{bounds.nr * (CELL + GAP)}px">
+  {#each candidates as p (key(p))}
+    <button
+      type="button"
+      class="cand"
+      style:left="{(p[1] - bounds.c0) * (CELL + GAP)}px"
+      style:top="{(p[0] - bounds.r0) * (CELL + GAP)}px"
+      style:width="{CELL}px"
+      style:height="{CELL}px"
+      aria-label="Add a Construction slot here"
+      onclick={() => onPlace?.([p[0], p[1]])}
+    >+</button>
+  {/each}
   {#each cells as cell (cell.i)}
     {@const v = cell.view}
     {@const line = cardLine(v)}
@@ -72,14 +110,20 @@
       class="cell"
       class:arcane={cell.arcane}
       class:empty={!v}
+      class:added={cell.added}
+      class:convertible={canConvert && !cell.arcane}
       style:left="{cell.c * (CELL + GAP)}px"
       style:top="{cell.r * (CELL + GAP)}px"
       style:width="{CELL}px"
       style:height="{CELL}px"
       style:background={v ? slotBg(v.t as CardType) : "var(--bg-empty-slot)"}
-      style:border-color={cell.arcane ? ARCANE_BORDER : "transparent"}
-      role="img"
-      aria-label={v ? `${v.t} ${line.top} ${line.bottom}` : "empty slot"}
+      style:border-color={cell.arcane ? ARCANE_BORDER : cell.added ? "#94A3B8" : "transparent"}
+      role="button"
+      tabindex="-1"
+      aria-label={v ? `${v.t} ${line.top} ${line.bottom}` : cell.arcane ? "arcane slot" : "empty slot"}
+      onclick={() => clickCell(cell)}
+      onkeydown={(e) => { if (e.key === "Enter") clickCell(cell); }}
+      oncontextmenu={(e) => contextCell(e, cell)}
       onmouseenter={() => (hover = cell.i)}
       onmouseleave={() => (hover = null)}
     >
@@ -92,6 +136,8 @@
         <span class="bottom">{line.bottom}</span>
       {:else if v}
         <span class="glyph dead">_</span>
+      {:else if cell.arcane}
+        <span class="glyph dead">a</span>
       {/if}
     </div>
   {/each}
@@ -106,8 +152,8 @@
         <div class="pop-title">{statLabel(hv.ident.attr)} {hv.contrib !== null ? formatStat(hv.ident.attr, hv.contrib) : ""}</div>
         <div class="row"><span>card value</span><span>{fmt(hv.ident.value ?? 0, 4)}</span></div>
         <div class="row"><span>base ({hv.t})</span><span>{fmt(hv.parts.base)}</span></div>
-        {#each hv.parts.adds as [src, v] (src)}
-          <div class="row"><span>+ {sourceLabel(src)}</span><span>{fmt(v)}</span></div>
+        {#each hv.parts.adds as [src, a] (src)}
+          <div class="row"><span>+ {sourceLabel(src)}</span><span>{fmt(a)}</span></div>
         {/each}
         {#each hv.parts.mults as [src, f] (src)}
           <div class="row"><span>× {sourceLabel(src)}</span><span>{fmt(f)}</span></div>
@@ -134,9 +180,17 @@
   .grid-wrap { position: relative; margin: 0 auto; }
   .cell {
     position: absolute; box-sizing: border-box; border: 2px solid transparent; border-radius: 6px;
-    color: #111827; overflow: hidden; font-variant-numeric: tabular-nums;
+    color: #111827; overflow: hidden; font-variant-numeric: tabular-nums; outline: none;
   }
   .cell.empty { opacity: 0.6; }
+  .cell.added { border-style: dashed; }
+  .cell.convertible { cursor: pointer; }
+  .cell.convertible:hover { box-shadow: 0 0 0 2px #A78BFA inset; }
+  .cand {
+    position: absolute; box-sizing: border-box; border: 1px dashed #64748B; border-radius: 6px; background: #4B5563;
+    color: #F1F5F9; font-size: 18px; font-weight: 600; cursor: pointer; opacity: .55; padding: 0;
+  }
+  .cand:hover { opacity: 1; }
   .cbar { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
   .glyph { position: absolute; top: 2px; right: 4px; font-size: 11px; font-weight: 700; opacity: 0.7; }
   .glyph.dead { left: 0; right: 0; text-align: center; top: 18px; opacity: 0.4; }
