@@ -3,7 +3,6 @@
 // the best core sets. Jobs run through a bounded queue so a run can be cancelled between jobs.
 
 import type { Deck } from "../deck";
-import { dispatchTagged, workerPoolSize } from "../workerPool";
 import { buildJob, withBudget, type BuiltJob, type JobContext, type JobSpec } from "./payload";
 import { extend, mysteryPool, poolFor } from "./rules";
 
@@ -55,6 +54,9 @@ export interface SearchRequest {
   seed:       number;
   onProgress?: (p: SearchProgress) => void;
   signal?:    AbortSignal;
+  /** Job runner and parallel lanes: the browser worker pool on the site, the WASM kernel directly in Node scripts. */
+  runner:     (payload: Record<string, unknown>, lane: number) => Promise<{ assignment: Placed[]; score: number }>;
+  lanes:      number;
 }
 
 export interface SearchResult {
@@ -71,7 +73,8 @@ export class SearchCancelled extends Error {
 /** Run payloads on the pool with at most one in flight per worker; results in input order. */
 async function runQueue(payloads: Record<string, unknown>[], phase: string, req: SearchRequest,
                         counter: { jobs: number }): Promise<{ assignment: Placed[]; score: number }[]> {
-  const n = workerPoolSize();
+  const n = Math.max(1, req.lanes);
+  const run = req.runner;
   const out: { assignment: Placed[]; score: number }[] = new Array(payloads.length);
   let next = 0, done = 0;
   req.onProgress?.({ phase, done: 0, total: payloads.length });
@@ -79,7 +82,7 @@ async function runQueue(payloads: Record<string, unknown>[], phase: string, req:
     while (next < payloads.length) {
       if (req.signal?.aborted) throw new SearchCancelled();
       const i = next++;
-      out[i] = await dispatchTagged<{ assignment: Placed[]; score: number }>(w, payloads[i]);
+      out[i] = await run(payloads[i], w);
       counter.jobs++;
       req.onProgress?.({ phase, done: ++done, total: payloads.length });
     }

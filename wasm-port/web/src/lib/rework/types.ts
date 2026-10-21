@@ -90,6 +90,9 @@ export interface StageBundle {
   level_max:  number;
   playstyles: Record<string, string[]>;
   builds:     BuildData[];
+  /** Deck shapes the ledger menus use that are not regular decks (the structural Construction v2 Mystery layout). */
+  extra_decks?: { name: string; ledger_deck: string; key: string; slots: [number, number][];
+                  arcane_slots: [number, number][]; core_slots: number; mystery: boolean }[];
 }
 
 /** One kernel stack's identity, parallel to the payload's `stacks`. */

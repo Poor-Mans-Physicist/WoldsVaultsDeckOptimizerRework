@@ -613,7 +613,7 @@
   </main>
 {:else if app.tab === "optimize"}
   {#if app.bundle?.rework}
-    <ReworkOptimize decks={app.decks} catalog={implicitCatalog()} cfg={app.bundle.rework} {baseUrl} />
+    <ReworkOptimize decks={app.decks} catalog={implicitCatalog()} cfg={app.bundle.rework} {baseUrl} deckmod={app.cfg?.deckmod ?? 0} />
   {:else}
     <div class="banner err">config.json has no rework section; rebuild the data (wasm-port/scripts/build_data.py).</div>
   {/if}

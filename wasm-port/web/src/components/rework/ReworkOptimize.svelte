@@ -2,7 +2,7 @@
   // Optimize tab of the rework site: inputs on the left, the deck in the centre, the picked cards and the deck's
   // totals on the right, a short guide at the bottom.
   import { onMount } from "svelte";
-  import type { Deck } from "../../lib/deck";
+  import { buildDeck, type Deck } from "../../lib/deck";
   import type { ImplicitDef } from "../../lib/implicits";
   import { TYPE_LABEL } from "../../lib/palette";
   import type { CardType } from "../../lib/types";
@@ -13,6 +13,8 @@
   import { DEPTHS, SearchCancelled, searchRework, type DeckChoice, type SearchProgress } from "../../lib/rework/search";
   import type { AllowedTypes } from "../../lib/rework/stacks";
   import { STAGES, STAGE_LABEL, type ReworkConfig, type RuleIn, type Stage, type StageBundle } from "../../lib/rework/types";
+  import { dispatchTagged, workerPoolSize } from "../../lib/workerPool";
+  import type { Placed } from "../../lib/rework/search";
   import ReworkGrid from "./ReworkGrid.svelte";
   import ResultPanel from "./ResultPanel.svelte";
   import HowTo from "./HowTo.svelte";
@@ -22,8 +24,9 @@
     catalog: Record<string, ImplicitDef>;
     cfg: ReworkConfig;
     baseUrl: string;
+    deckmod: number;
   }
-  let { decks, catalog, cfg, baseUrl }: Props = $props();
+  let { decks: baseDecks, catalog, cfg, baseUrl, deckmod }: Props = $props();
 
   type Mode = "global" | "targeted" | "exact";
   const STORE = "wvdo-rework-settings-v1";
@@ -61,6 +64,19 @@
   let abort: AbortController | null = null;
 
   const curStage = $derived(mode === "global" ? stage : valueStage);
+  // Regular decks plus the structural shapes the data bundles carry (from any loaded stage).
+  const decks: Deck[] = $derived.by(() => {
+    const extra = new Map<string, Deck>();
+    for (const b of Object.values(bundles)) {
+      for (const x of b?.extra_decks ?? []) {
+        if (extra.has(x.key)) continue;
+        extra.set(x.key, buildDeck({ key: x.key, name: x.name, slots: x.slots, arcane_slots: x.arcane_slots,
+                                     base_core_slots: x.core_slots - deckmod, min_regular: 0, max_greed: 0,
+                                     implicit: x.mystery ? { kind: "mystery" } : null }, deckmod));
+      }
+    }
+    return [...baseDecks, ...extra.values()];
+  });
   const bundle = $derived(bundles[curStage] ?? null);
   const objectives = $derived(bundle ? playstyleObjectives(bundle, mode !== "global") : []);
   const deck = $derived(decks.find((d) => d.key === deckKey) ?? decks[0] ?? null);
@@ -115,6 +131,7 @@
     if (!ownedDecks.length) ownedDecks = decks.map((d) => d.key);
     try {
       await ensureBundle(curStage);
+      await ensureBundle("max");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -211,7 +228,9 @@
         exact: mode === "exact" ? new Map(exactCards.map((e) => [e.key, e.n])) : undefined,
       };
       const res = await searchRework({ ctx, decks: choices, owned, depth: DEPTHS[depth], seed: 20261020,
-                                       onProgress: (p) => (progress = p), signal: abort.signal });
+                                       onProgress: (p) => (progress = p), signal: abort.signal,
+                                       runner: (p, w) => dispatchTagged<{ assignment: Placed[]; score: number }>(w, p),
+                                       lanes: workerPoolSize() });
       view = await analyse(res.best, objective, curStage);
       viewDeck = res.best.spec.deck;
       ranking = res.ranking;
