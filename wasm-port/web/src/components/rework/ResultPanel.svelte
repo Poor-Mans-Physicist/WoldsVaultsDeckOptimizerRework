@@ -2,6 +2,7 @@
   // Right column: what the run picked (cards, cores) and what the deck gives (stat totals, granted levels, loot).
   import { TYPE_LABEL } from "../../lib/palette";
   import type { CardType } from "../../lib/types";
+  import { MYTHIC_WEIGHT } from "../../lib/rework/loot";
   import { formatStat, statLabel, type ResultView } from "../../lib/rework/results";
 
   interface Props {
@@ -25,7 +26,7 @@
   const scoreLine = $derived.by(() => {
     if (!view) return "";
     const k = view.objective.kind;
-    if (k === "loot") return "omega + 5 × mythic rolls per 1000 chests";
+    if (k === "loot") return "omega (green) + 5 × mythic (purple) rolls per 1000 chests";
     if (k === "offense") return "average damage cycles";
     if (k === "defense") return "average survival cycles";
     if (k === "ndm") return "NDM";
@@ -65,7 +66,13 @@
     <div class="placeholder">Run the optimizer to see the cards it picks and the deck's total stats here.</div>
   {:else}
     <section>
-      <div class="score">{view.objective.kind === "loot" ? num(view.score, 0) : num(view.score, 3)}</div>
+      {#if view.objective.kind === "loot" && view.loot}
+        <div class="score">{num(view.score, 0)}
+          <span class="split">(<span class="omega" title="{num(view.loot.omega, 0)} omega rolls per 1000 chests">{num(view.loot.omega, 0)}</span>
+            + <span class="mythic" title="5 × {num(view.loot.mythic, 1)} mythic rolls per 1000 chests">{num(MYTHIC_WEIGHT * view.loot.mythic, 0)}</span>)</span></div>
+      {:else}
+        <div class="score">{num(view.score, 3)}</div>
+      {/if}
       <div class="sub">{scoreLine}</div>
       <div class="sub">{view.objective.label}</div>
     </section>
@@ -91,7 +98,8 @@
         <div class="kv"><span>Item Quantity (with base)</span><span>{formatStat("x", view.loot.iq)}</span></div>
         <div class="kv"><span>Item Rarity (with base)</span><span>{formatStat("x", view.loot.ir)}</span></div>
         {#each view.loot.paths as p (p.label)}
-          <div class="kv" class:best={p.label === view.loot.path}><span>{p.label}</span><span>{num(p.score, 0)}</span></div>
+          <div class="kv" class:best={p.label === view.loot.path}><span>{p.label}</span>
+            <span>{num(p.score, 0)} <span class="psplit">(<span class="omega">{num(p.omega, 0)}</span> + <span class="mythic">{num(MYTHIC_WEIGHT * p.mythic, 0)}</span>)</span></span></div>
         {/each}
       </section>
     {/if}
@@ -131,6 +139,10 @@
   h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary); }
   h4 { margin: 10px 0 4px; font-size: 12px; color: var(--text-secondary); }
   .score { font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .split { font-size: 15px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+  .psplit { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .omega { color: #4ADE80; }
+  .mythic { color: #C084FC; }
   .sub { color: var(--text-secondary); font-size: 12px; }
   .line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .muted { color: var(--text-muted); }

@@ -269,6 +269,9 @@ pub struct LootEvalIn {
 pub struct LootEvalOut {
     pub score: f64,
     pub path: usize,
+    /// Omega and mythic pool hits per `scale` chests on the winning path (unweighted).
+    pub omega: f64,
+    pub mythic: f64,
 }
 
 type R<T> = Result<T, String>;
@@ -574,5 +577,6 @@ pub fn loot_eval_wasm(input: JsValue) -> Result<JsValue, JsValue> {
     let inp: LootEvalIn = parse(input)?;
     let term = loot_term(&inp.loot, inp.loot.iq_attr.max(inp.loot.ir_attr) + 1).map_err(err)?;
     let (score, path) = term.eval(inp.iq, inp.ir);
-    out(&LootEvalOut { score, path })
+    let (omega, mythic) = term.parts(inp.iq, inp.ir, path);
+    out(&LootEvalOut { score, path, omega, mythic })
 }

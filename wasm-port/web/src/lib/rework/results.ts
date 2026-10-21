@@ -87,7 +87,10 @@ export interface LootView {
   path:    string;
   iq:      number;
   ir:      number;
-  paths:   { label: string; score: number }[];
+  /** Winning path: omega and mythic pool hits per 1000 chests (score = omega + 5 x mythic). */
+  omega:   number;
+  mythic:  number;
+  paths:   { label: string; score: number; omega: number; mythic: number }[];
 }
 
 export interface ResultView {
@@ -146,7 +149,8 @@ export async function analyse(c: Candidate, objective: Objective, stage: Stage):
     })));
     const bestI = per.reduce((bi, r, i) => (r.score > per[bi].score ? i : bi), 0);
     loot = { score: per[bestI].score, path: paths[bestI].label, iq: LOOT_BASE[stage].iq + iq,
-             ir: LOOT_BASE[stage].ir + ir, paths: paths.map((p, i) => ({ label: p.label, score: per[i].score })) };
+             ir: LOOT_BASE[stage].ir + ir, omega: per[bestI].omega, mythic: per[bestI].mythic,
+             paths: paths.map((p, i) => ({ label: p.label, score: per[i].score, omega: per[i].omega, mythic: per[i].mythic })) };
   }
   return {
     deckName: deck.name, implicits: c.spec.implicitKeys, cores: job.coreSpec, score: result.score, objective, slots,

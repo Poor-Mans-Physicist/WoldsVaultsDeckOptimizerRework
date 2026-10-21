@@ -356,6 +356,32 @@ impl LootTerm {
         }
         if best.0.is_finite() { best } else { (0.0, 0) }
     }
+
+    /// Omega and mythic pool hits per `scale` chests on one path (unweighted; the score is omega + mythic_weight x
+    /// mythic).
+    pub fn parts(&self, q: f64, r: f64, path: usize) -> (f64, f64) {
+        let Some(&(cap, rmul)) = self.paths.get(path) else { return (0.0, 0.0) };
+        let qq = (self.base_q + q).max(0.0);
+        let mult = 1.0 + 1.1 * (1.0 + qq).ln();
+        let mut rolls = 0.0;
+        for &b in &self.base_rolls {
+            let f = b * mult;
+            rolls += if f.floor() >= cap { cap } else { f };
+        }
+        rolls /= self.base_rolls.len().max(1) as f64;
+        let rr = (self.base_r + r) * rmul;
+        let sc: [f64; 5] = std::array::from_fn(|i| loot_pool_scale(i, rr));
+        let (mut omega, mut mythic) = (0.0, 0.0);
+        for w in &self.chests {
+            let z: f64 = (0..5).map(|i| w[i] * sc[i]).sum();
+            if z > 0.0 {
+                omega += rolls * w[3] * sc[3] / z;
+                mythic += rolls * w[4] * sc[4] / z;
+            }
+        }
+        let n = self.chests.len().max(1) as f64;
+        (self.scale * omega / n, self.scale * mythic / n)
+    }
 }
 
 /// Curves are sparse: (attribute index, curve) for the attributes that move this channel.
@@ -3314,6 +3340,9 @@ mod rework_tests {
         let only = |c: f64, m: f64| loot(4.0, 10.0, vec![(c, m)]).eval(500.0, 0.0).0;
         let (v, path) = max.eval(500.0, 0.0);
         assert!(only(78.0, 0.5) > only(58.0, 1.0) && path == 1 && (v - only(78.0, 0.5)).abs() < 1e-12);
+        let (score, path) = early.eval(1.0, 2.0);
+        let (om, my) = early.parts(1.0, 2.0, path);
+        assert!((om + 5.0 * my - score).abs() < 1e-9 * score.max(1.0), "{} + 5 x {} != {}", om, my, score);
         let neg = loot(0.0, 0.0, vec![(54.0, 1.0)]);
         assert!((neg.eval(0.0, -0.5).0 - 157.32774398977227).abs() < 1e-9);
     }

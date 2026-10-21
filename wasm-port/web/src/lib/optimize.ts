@@ -145,9 +145,9 @@ export async function explainTaggedPayload(
 /** Loot objective at given deck IQ / IR totals (main thread). */
 export async function lootEvalPayload(
   input: { loot: unknown; iq: number; ir: number },
-): Promise<{ score: number; path: number }> {
+): Promise<{ score: number; path: number; omega: number; mythic: number }> {
   await initWasm();
-  return lootEval(input) as { score: number; path: number };
+  return lootEval(input) as { score: number; path: number; omega: number; mythic: number };
 }
 
 /** One tagged SA run (a candidate combo × a restart chunk). Worker-side. */
