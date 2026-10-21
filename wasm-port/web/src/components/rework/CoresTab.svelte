@@ -24,7 +24,17 @@
     ranking: { label: string; cores: string[]; score: number }[];
   }
 
+  interface PassGroup {
+    n_decks: number;
+    picks: Record<string, number>;
+    gain: Record<string, number>;
+    gain_rel: Record<string, number>;
+    decks: { label: string; deck: string; keys: string[]; mystery: boolean; cores: string[]; score: number }[];
+  }
+  interface CorePass { stage: Stage; generated: string; groups: Record<string, PassGroup> }
+
   const GROUPS = ["Melee", "Caster", "Physical abilities", "Thorns & Block"];
+  const PASS_GROUPS = ["Balanced", ...GROUPS, "Loot"];
   const X_DISPLAY = new Set(["empyreal", "arsenal", "pluto"]);
   const STALE = /don't yet grant/i;
   const GLYPH: Record<string, string> = { row: "R", col: "C", surr: "S", diag: "X", deluxe: "D", typeless: "T",
@@ -32,6 +42,8 @@
 
   let stage: Stage = $state("max");
   let pages: Partial<Record<Stage, CoresPage>> = $state.raw({});
+  let passes: Partial<Record<Stage, CorePass | null>> = $state.raw({});
+  let deckGroup = $state("Balanced");
   let meta = $state("");
   let error: string | null = $state(null);
   let qCores = $state("");
@@ -44,6 +56,15 @@
   $effect(() => {
     const s = stage;
     try { localStorage.setItem("wvdo-cores-stage", s); } catch { /* storage unavailable */ }
+    if (passes[s] === undefined) {
+      fetch(`${baseUrl}rework/cores_pass_${s}.json`, { cache: "no-cache" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((p: CorePass | null) => {
+          if (!p) console.error(`[cores] FALLBACK: no deck pass for ${s}; only the ledger builds' picks are shown`);
+          passes = { ...passes, [s]: p };
+        })
+        .catch((e) => { console.error(`[cores] FALLBACK: deck pass for ${s} unreadable; ledger picks only`, e); passes = { ...passes, [s]: null }; });
+    }
     if (pages[s]) return;
     fetch(`${baseUrl}rework/${s}.json`, { cache: "no-cache" })
       .then((r) => { if (!r.ok) throw new Error(`${s}.json: ${r.status}`); return r.json(); })
@@ -56,6 +77,8 @@
   });
 
   const page = $derived(pages[stage] ?? null);
+  const pass = $derived(passes[stage] ?? null);
+  const passGroups = $derived(pass ? PASS_GROUPS.filter((g) => pass.groups[g]) : []);
 
   function range(core: string, which: "normal" | "greater"): string {
     const r = cfg.rolls[core]?.[which];
@@ -73,20 +96,44 @@
     if (!group) return { n: page.core_use[core] ?? 0, of: page.builds };
     return { n: page.core_use_by_group[group]?.[core] ?? 0, of: page.group_builds[group] ?? 0 };
   }
-  function stars(core: string): number {
-    const s = share(core, null);
-    const f = s.of ? s.n / s.of : 0;
+  function starsOf(f: number): number {
     return f >= 0.4 ? 5 : f >= 0.2 ? 4 : f >= 0.1 ? 3 : f > 0 ? 2 : 1;
+  }
+  function pickStars(core: string): number {
+    if (pass?.groups.Balanced) return starsOf((pass.groups.Balanced.picks[core] ?? 0) / pass.groups.Balanced.n_decks);
+    const s = share(core, null);
+    return starsOf(s.of ? s.n / s.of : 0);
+  }
+  /** Power: the core's gain (with vs without, all builds) ranked against the other cores. */
+  function powerStars(core: string): number | null {
+    const g = pass?.groups.Balanced;
+    if (!g || g.gain[core] === undefined) return null;
+    const vals = Object.values(g.gain).sort((a, b) => a - b);
+    const q = vals.indexOf(g.gain[core]) / Math.max(1, vals.length - 1);
+    return 1 + Math.round(q * 4);
+  }
+  function passPick(core: string, g: string): { n: number; of: number } | null {
+    const pg = pass?.groups[g];
+    return pg ? { n: pg.picks[core] ?? 0, of: pg.n_decks } : null;
+  }
+  function gainText(core: string): string {
+    const g = pass?.groups.Balanced;
+    if (!g || g.gain[core] === undefined) return "–";
+    const v = g.gain[core];
+    return `${v >= 0 ? "+" : ""}${v.toFixed(2)}`;
   }
   const coreRows = $derived(sheet.cores.filter((c) => !qCores || JSON.stringify(c).toLowerCase().includes(qCores.toLowerCase())));
   const modRows = $derived(sheet.mods.filter((m) => !qMods || JSON.stringify(m).toLowerCase().includes(qMods.toLowerCase())));
 
-  function modRank(m: { name: string; deck: string }): { rank: number; score: number; cores: string[] } | null {
-    if (!page) return null;
+  /** The modifier's deck (or its Mystery single) in the deck pass ranking for one playstyle. */
+  function modRank(m: { name: string; deck: string }, g: string): { rank: number; score: number; cores: string[]; of: number } | null {
+    const pg = pass?.groups[g];
+    if (!pg) return null;
     const key = m.name.toLowerCase();
-    const i = page.ranking.findIndex((r) => r.label === m.deck || (r.label.startsWith("The Mystery Deck") && r.label.toLowerCase().includes(key)));
-    return i < 0 ? null : { rank: i + 1, score: page.ranking[i].score, cores: page.ranking[i].cores };
+    const i = pg.decks.findIndex((d) => (!d.mystery && d.label === m.deck) || (d.mystery && d.keys.length === 1 && d.keys[0] === key));
+    return i < 0 ? null : { rank: i + 1, score: pg.decks[i].score, cores: pg.decks[i].cores, of: pg.decks.length };
   }
+  const fmtScore = (g: string, v: number) => (g === "Loot" ? v.toLocaleString("en-US", { maximumFractionDigits: 0 }) : v.toFixed(2));
 
   function grid(d: CoresPage["designs"][number]) {
     const r0 = Math.min(...d.slots.map((s) => s[0])), c0 = Math.min(...d.slots.map((s) => s[1]));
@@ -117,8 +164,9 @@
       <h3>Reading the numbers</h3>
       <ul>
         <li><b>Stage roll</b>: the value the optimizer uses at this stage (Early middle of normal, Mid top of normal, End and Max top of greater).</li>
-        <li><b>Picked</b>: how many of the stage's ledger builds run the core, overall and per playstyle.</li>
-        <li><b>Stars</b> summarise the overall pick share.</li>
+        <li><b>Best set in</b>: how many decks put the core in their best core set, per playstyle (a full pass over every deck).</li>
+        <li><b>Gain</b>: best set with the core minus best set without it, in cycles, averaged over the decks it is legal on.</li>
+        <li><b>Power / pick stars</b> rank the all-builds gain and picks; <b>Ledger</b> counts the stage's ledger builds running the core.</li>
       </ul>
     </div>
     <div class="box">
@@ -142,13 +190,15 @@
     <div class="tbl"><table>
       <thead>
         <tr><th rowspan="2">Core</th><th rowspan="2">Mechanic</th><th rowspan="2">Lesser</th><th rowspan="2">Normal</th>
-          <th rowspan="2">Greater</th><th rowspan="2">Stage roll</th><th rowspan="2">Stacking</th><th rowspan="2">Pick</th>
-          <th colspan={1 + GROUPS.length} class="grp">Picked by {STAGE_LABEL[stage]} builds</th><th rowspan="2">Notes</th></tr>
-        <tr><th class="c">All</th>{#each GROUPS as g (g)}<th class="c">{g}</th>{/each}</tr>
+          <th rowspan="2">Greater</th><th rowspan="2">Stage roll</th><th rowspan="2">Stacking</th><th rowspan="2">Power</th><th rowspan="2">Pick</th>
+          {#if passGroups.length}<th colspan={passGroups.length} class="grp">Best set in (of {pass?.groups.Balanced?.n_decks ?? "?"} decks)</th>{/if}
+          <th rowspan="2" class="c">Gain</th><th rowspan="2" class="c">Ledger</th><th rowspan="2">Notes</th></tr>
+        <tr>{#each passGroups as g (g)}<th class="c">{g === "Balanced" ? "All" : g}</th>{/each}</tr>
       </thead>
       <tbody>
         {#each coreRows as c (c.name)}
           {@const all = share(c.key, null)}
+          {@const pw = powerStars(c.key)}
           <tr>
             <td><div class="nm">{c.name}{#if c.change}<span class="chg {c.change}">{c.change}</span>{/if}</div><div class="id">{c.kind}</div></td>
             <td class="mech">{c.mechanic}</td>
@@ -157,22 +207,48 @@
             <td class="num">{range(c.key, "greater")}</td>
             <td class="num hi">{stageRoll(c.key)}</td>
             <td><span class="pill {c.stacking.startsWith('Mult') ? 'mul' : 'add'}">{c.stacking}</span></td>
-            <td><span class="stars" aria-label="{stars(c.key)} of 5">{"★".repeat(stars(c.key))}{"☆".repeat(5 - stars(c.key))}</span></td>
-            <td class="num c">{all.n}<span class="of">/{all.of}</span></td>
-            {#each GROUPS as g (g)}
-              {@const s = share(c.key, g)}
-              <td class="num c">{s.n}<span class="of">/{s.of}</span></td>
+            <td>{#if pw !== null}<span class="stars" aria-label="{pw} of 5">{"★".repeat(pw)}{"☆".repeat(5 - pw)}</span>{:else}<span class="of">–</span>{/if}</td>
+            <td><span class="stars" aria-label="{pickStars(c.key)} of 5">{"★".repeat(pickStars(c.key))}{"☆".repeat(5 - pickStars(c.key))}</span></td>
+            {#each passGroups as g (g)}
+              {@const pp = passPick(c.key, g)}
+              <td class="num c">{pp ? pp.n : "–"}</td>
             {/each}
+            <td class="num c">{gainText(c.key)}</td>
+            <td class="num c">{all.n}<span class="of">/{all.of}</span></td>
             <td class="note">{STALE.test(c.note) ? "" : c.note}</td>
           </tr>
         {/each}
         {#each sheet.other as o (o.name)}
-          <tr class="other"><td><div class="nm">{o.name}</div></td><td colspan="2">{o.kind}</td><td colspan={10 + GROUPS.length} class="note">{o.note}</td></tr>
+          <tr class="other"><td><div class="nm">{o.name}</div></td><td colspan="2">{o.kind}</td><td colspan={10 + passGroups.length} class="note">{o.note}</td></tr>
         {/each}
       </tbody>
     </table></div>
     <p class="dim">Nitwit and Archive need a deck with Arcane slots. Construction and Arcane cores are not searched; the optimizer lets you place their slots by hand.</p>
   </section>
+
+  {#if pass}
+    <section>
+      <div class="sechead">
+        <div><h2>Best decks</h2><p>Top decks per playstyle from the full deck pass, with the cores the search chose.</p></div>
+        <div class="seg small-seg" role="radiogroup" aria-label="Playstyle">
+          {#each passGroups as g (g)}
+            <button type="button" role="radio" aria-checked={deckGroup === g} class="seg-btn" class:active={deckGroup === g}
+              onclick={() => (deckGroup = g)}>{g === "Balanced" ? "All builds" : g}</button>
+          {/each}
+        </div>
+      </div>
+      <div class="decks">
+        {#each (pass.groups[deckGroup] ?? pass.groups.Balanced).decks.slice(0, 6) as d, i (d.label)}
+          <article class="deck">
+            <header><span class="rank">#{i + 1}</span><span class="score">{fmtScore(deckGroup, d.score)}</span></header>
+            <h4 title={d.label}>{d.label}</h4>
+            <div class="cores">{d.cores.map(cap).join(" + ") || "no cores"}</div>
+          </article>
+        {/each}
+      </div>
+      <p class="dim">Scores are cycles averaged over the playstyle's ledger builds (Loot: omega + 5 × mythic rolls per 1000 chests). Deck pass {pass.generated}.</p>
+    </section>
+  {/if}
 
   <section>
     <div class="sechead">
@@ -205,21 +281,26 @@
 
   <section>
     <div class="sechead">
-      <div><h2>Deck modifiers</h2><p>Modifiers don't roll or use a socket. Rank is the deck's place in DeckFAST's all-builds ranking at this stage (top 40).</p></div>
+      <div><h2>Deck modifiers</h2><p>Modifiers don't roll or use a socket. Rank is the deck's place in the full deck pass per playstyle (a Mystery modifier ranks as the Mystery deck with that modifier alone).</p></div>
       <input type="search" bind:value={qMods} placeholder="Filter modifiers" aria-label="Filter modifiers" />
     </div>
     <div class="tbl"><table class="mods">
-      <thead><tr><th>Modifier</th><th>Mechanic</th><th>Value</th><th>Stacking</th><th class="c">Rank</th><th>Best (all builds)</th></tr></thead>
+      <thead><tr><th rowspan="2">Modifier</th><th rowspan="2">Mechanic</th><th rowspan="2">Value</th><th rowspan="2">Stacking</th>
+        {#if passGroups.length}<th colspan={passGroups.length} class="grp">Deck rank</th>{/if}<th rowspan="2">Best (all builds)</th></tr>
+        <tr>{#each passGroups as g (g)}<th class="c">{g === "Balanced" ? "All" : g}</th>{/each}</tr></thead>
       <tbody>
         {#each modRows as m (m.name)}
-          {@const r = modRank(m)}
+          {@const r = modRank(m, "Balanced")}
           <tr>
             <td><div class="nm">{m.name}</div><div class="id">{m.deck}</div></td>
             <td class="mech">{m.mechanic}</td>
             <td class="num hi">{m.value}</td>
             <td><span class="pill frq">{m.stacking}</span></td>
-            <td class="num c">{r ? `#${r.rank}` : "–"}</td>
-            <td class="note">{r ? `${r.score.toFixed(2)} · ${r.cores.map(cap).join(" + ")}` : ""}</td>
+            {#each passGroups as g (g)}
+              {@const rg = modRank(m, g)}
+              <td class="num c">{rg ? `#${rg.rank}` : "–"}</td>
+            {/each}
+            <td class="note">{r ? `${r.score.toFixed(2)} · ${r.cores.map(cap).join(" + ") || "no cores"}` : ""}</td>
           </tr>
         {/each}
       </tbody>
@@ -246,6 +327,8 @@
   .seg-btn { flex: 1; padding: 5px 0; font-size: 12px; background: transparent; color: var(--text-secondary); border: 0; cursor: pointer; font-family: inherit; }
   .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
   .seg-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+  .small-seg { max-width: 640px; flex: 1 1 420px; }
+  .small-seg .seg-btn { padding: 5px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   section { display: grid; gap: 10px; }
   .sechead { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
   .sechead p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
